@@ -1,4 +1,4 @@
-// $ANTLR 3.1.1 /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g 2009-03-13 16:56:21
+// $ANTLR 3.1.3 Mar 18, 2009 10:09:25 src/Kodkodi.g 2009-07-29 14:34:38
 
 package de.tum.in.isabelle.Kodkodi;
 
@@ -48,6 +48,8 @@ import kodkod.instance.Universe;
 import kodkod.util.ints.IntSet;
 import kodkod.util.ints.SparseSequence;
 import org.antlr.runtime.CommonTokenStream;
+import java.util.Iterator; //solveall
+
 
 
 import org.antlr.runtime.*;
@@ -165,10 +167,11 @@ public class KodkodiParser extends Parser {
         
 
     public String[] getTokenNames() { return KodkodiParser.tokenNames; }
-    public String getGrammarFileName() { return "/Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g"; }
+    public String getGrammarFileName() { return "src/Kodkodi.g"; }
+
 
     String solBuf; //server
-
+    boolean solveAll; //solveAll
     boolean verbose;
     boolean exitOnSuccess;
     boolean cleanUpInst;
@@ -212,8 +215,7 @@ public class KodkodiParser extends Parser {
     }
 
     public final static KodkodiParser create(boolean verbose, boolean exitOnSuccess,
-                                             boolean cleanUpInst, int maxThreads,
-                                             Lexer lexer) {
+                                             boolean cleanUpInst, int maxThreads, Lexer lexer) {
         KodkodiParser parser = new KodkodiParser(new CommonTokenStream(lexer));
         parser.verbose = verbose;
         parser.exitOnSuccess = exitOnSuccess;
@@ -756,53 +758,70 @@ public class KodkodiParser extends Parser {
         return result;
     }
 
+    private final void printSol(StringBuilder buf, Solution solution, int problemNo, 
+                               long parsingTime, Universe universe, Bounds bounds,
+    				           Formula formula)
+    {
+        buf.append("\n*** PROBLEM " + problemNo + " ***\n");
+        buf.append("\n---OUTCOME---\n");
+        buf.append(solution.outcome());
+        if (verbose) {
+            buf.append("\n---UNIVERSE---\n" + universe.toString() + "\n");
+            buf.append("\n---BOUNDS---\n" + bounds.toString() + "\n");
+            buf.append("\n---FORMULA---\n" + formula.toString() + "\n");
+        }
+        buf.append("\n");
+        if (solution.instance() != null) {
+            buf.append("\n---INSTANCE---\n");
+            buf.append(cleanedUpInstance(solution.instance(), bounds,
+                                         cleanUpInst));
+            buf.append("\n");
+        }
+        if (solution.proof() != null) {
+            buf.append("\n---PROOF---\n");
+            buf.append(solution.proof());
+            buf.append("\n");
+        }
+        buf.append("\n---STATS---\n");
+        buf.append(solution.stats());
+        
+        int pos = buf.lastIndexOf("translation time:");
+        if (pos == -1)
+            pos = buf.length();
+        buf.insert(pos, "parsing time: " + parsingTime + " ms\n");
+        
+        pos = buf.lastIndexOf("ints: []\n");
+        if (pos != -1)
+            buf.delete(pos, pos + 9);    
+    }
+
     private final void solve(Token token, int problemNo, long parsingTime,
-                             Options options, Universe universe, Bounds bounds,
-                             Formula formula)
+                             Options options, Universe universe, 
+                             Bounds bounds, Formula formula)
     {
         final Solver solver = new Solver(options);
         try {
-            final Solution solution = solver.solve(formula, bounds);
-
+    	    Solution solution = null;
             final StringBuilder buf = new StringBuilder();
-            buf.append("\n*** PROBLEM " + problemNo + " ***\n");
-            buf.append("\n---OUTCOME---\n");
-            buf.append(solution.outcome());
-            if (verbose) {
-                buf.append("\n---UNIVERSE---\n" + universe.toString() + "\n");
-                buf.append("\n---BOUNDS---\n" + bounds.toString() + "\n");
-                buf.append("\n---FORMULA---\n" + formula.toString() + "\n");
-            }
-            buf.append("\n");
-            if (solution.instance() != null) {
-                buf.append("\n---INSTANCE---\n");
-                buf.append(cleanedUpInstance(solution.instance(), bounds,
-                                             cleanUpInst));
-                buf.append("\n");
-            }
-            if (solution.proof() != null) {
-                buf.append("\n---PROOF---\n");
-                buf.append(solution.proof());
-                buf.append("\n");
-            }
-            buf.append("\n---STATS---\n");
-            buf.append(solution.stats());
-
-            int pos = buf.lastIndexOf("translation time:");
-            if (pos == -1)
-                pos = buf.length();
-            buf.insert(pos, "parsing time: " + parsingTime + " ms\n");
-
-            pos = buf.lastIndexOf("ints: []\n");
-            if (pos != -1)
-                buf.delete(pos, pos + 9);
-
+    	    if(solveAll) {
+                final Iterator<Solution> solutions = solver.solveAll(formula, bounds);
+                while (solutions.hasNext()) {
+                    solution = solutions.next();
+                    if(solution.instance() == null) 
+                        continue;
+                    printSol(buf, solution, problemNo, parsingTime, universe, bounds, formula);
+                }
+    	    } else {
+                solution = solver.solve(formula, bounds);
+                printSol(buf, solution, problemNo, parsingTime, universe, bounds, formula);
+    	    }
+            buf.append("\n*** END ***\n");
             System.out.println(buf);
-	    solBuf = buf.toString();
-	    
+    	    solBuf = buf.toString();
+    	    
             if (exitOnSuccess
-                    && (solution.outcome() == Solution.Outcome.TRIVIALLY_SATISFIABLE
-                        || solution.outcome() == Solution.Outcome.SATISFIABLE))
+                && (solution.outcome() == Solution.Outcome.TRIVIALLY_SATISFIABLE
+                    || solution.outcome() == Solution.Outcome.SATISFIABLE))
                 System.exit(0);
         } catch (UnboundLeafException except) {
             huh(token, "formula contains unbounded leaf expression: "
@@ -833,13 +852,13 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "problems"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:733:1: problems : ( problem )* ;
+    // src/Kodkodi.g:754:1: problems : ( problem )* ;
     public final String problems() throws RecognitionException {
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:733:9: ( ( problem )* )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:734:9: ( problem )*
+            // src/Kodkodi.g:754:9: ( ( problem )* )
+            // src/Kodkodi.g:755:9: ( problem )*
             {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:734:9: ( problem )*
+            // src/Kodkodi.g:755:9: ( problem )*
             loop1:
             do {
                 int alt1=2;
@@ -852,7 +871,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt1) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:734:9: problem
+            	    // src/Kodkodi.g:755:9: problem
             	    {
             	    pushFollow(FOLLOW_problem_in_problems56);
             	    problem();
@@ -888,20 +907,20 @@ public class KodkodiParser extends Parser {
         }
         finally {
         }
-        return (solBuf);
+        return solBuf;
     }
     // $ANTLR end "problems"
 
 
     // $ANTLR start "problem"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:744:1: problem : ( option )* univ_spec ( tuple_reg_directive )* ( bound_spec )* ( int_bound_spec )? ( expr_reg_directive )* solve_directive ;
+    // src/Kodkodi.g:765:1: problem : ( option )* univ_spec ( tuple_reg_directive )* ( bound_spec )* ( int_bound_spec )? ( expr_reg_directive )* solve_directive ;
     public final void problem() throws RecognitionException {
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:744:8: ( ( option )* univ_spec ( tuple_reg_directive )* ( bound_spec )* ( int_bound_spec )? ( expr_reg_directive )* solve_directive )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:745:9: ( option )* univ_spec ( tuple_reg_directive )* ( bound_spec )* ( int_bound_spec )? ( expr_reg_directive )* solve_directive
+            // src/Kodkodi.g:765:8: ( ( option )* univ_spec ( tuple_reg_directive )* ( bound_spec )* ( int_bound_spec )? ( expr_reg_directive )* solve_directive )
+            // src/Kodkodi.g:766:9: ( option )* univ_spec ( tuple_reg_directive )* ( bound_spec )* ( int_bound_spec )? ( expr_reg_directive )* solve_directive
             {
              reset(); 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:746:9: ( option )*
+            // src/Kodkodi.g:767:9: ( option )*
             loop2:
             do {
                 int alt2=2;
@@ -914,7 +933,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt2) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:746:9: option
+            	    // src/Kodkodi.g:767:9: option
             	    {
             	    pushFollow(FOLLOW_option_in_problem83);
             	    option();
@@ -935,7 +954,7 @@ public class KodkodiParser extends Parser {
 
             state._fsp--;
 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:748:9: ( tuple_reg_directive )*
+            // src/Kodkodi.g:769:9: ( tuple_reg_directive )*
             loop3:
             do {
                 int alt3=2;
@@ -948,7 +967,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt3) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:748:9: tuple_reg_directive
+            	    // src/Kodkodi.g:769:9: tuple_reg_directive
             	    {
             	    pushFollow(FOLLOW_tuple_reg_directive_in_problem104);
             	    tuple_reg_directive();
@@ -964,7 +983,7 @@ public class KodkodiParser extends Parser {
                 }
             } while (true);
 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:749:9: ( bound_spec )*
+            // src/Kodkodi.g:770:9: ( bound_spec )*
             loop4:
             do {
                 int alt4=2;
@@ -977,7 +996,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt4) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:749:9: bound_spec
+            	    // src/Kodkodi.g:770:9: bound_spec
             	    {
             	    pushFollow(FOLLOW_bound_spec_in_problem115);
             	    bound_spec();
@@ -993,7 +1012,7 @@ public class KodkodiParser extends Parser {
                 }
             } while (true);
 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:750:9: ( int_bound_spec )?
+            // src/Kodkodi.g:771:9: ( int_bound_spec )?
             int alt5=2;
             int LA5_0 = input.LA(1);
 
@@ -1002,7 +1021,7 @@ public class KodkodiParser extends Parser {
             }
             switch (alt5) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:750:9: int_bound_spec
+                    // src/Kodkodi.g:771:9: int_bound_spec
                     {
                     pushFollow(FOLLOW_int_bound_spec_in_problem126);
                     int_bound_spec();
@@ -1015,7 +1034,7 @@ public class KodkodiParser extends Parser {
 
             }
 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:751:9: ( expr_reg_directive )*
+            // src/Kodkodi.g:772:9: ( expr_reg_directive )*
             loop6:
             do {
                 int alt6=2;
@@ -1028,7 +1047,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt6) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:751:9: expr_reg_directive
+            	    // src/Kodkodi.g:772:9: expr_reg_directive
             	    {
             	    pushFollow(FOLLOW_expr_reg_directive_in_problem137);
             	    expr_reg_directive();
@@ -1065,7 +1084,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "option"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:753:1: option returns [Vector<String> strs = new Vector<String>()] : ( SOLVER COLON s1= STR_LITERAL ( COMMA s2= STR_LITERAL )* | SYMMETRY_BREAKING COLON k= NUM | SHARING COLON k= NUM | BIT_WIDTH COLON k= NUM | SKOLEM_DEPTH COLON k= NUM | FLATTEN COLON t= ( TRUE | FALSE ) );
+    // src/Kodkodi.g:774:1: option returns [Vector<String> strs = new Vector<String>()] : ( SOLVER COLON s1= STR_LITERAL ( COMMA s2= STR_LITERAL )* | SYMMETRY_BREAKING COLON k= NUM | SHARING COLON k= NUM | BIT_WIDTH COLON k= NUM | SKOLEM_DEPTH COLON k= NUM | FLATTEN COLON t= ( TRUE | FALSE ) );
     public final Vector<String> option() throws RecognitionException {
         Vector<String> strs =  new Vector<String>();
 
@@ -1075,7 +1094,7 @@ public class KodkodiParser extends Parser {
         Token t=null;
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:753:60: ( SOLVER COLON s1= STR_LITERAL ( COMMA s2= STR_LITERAL )* | SYMMETRY_BREAKING COLON k= NUM | SHARING COLON k= NUM | BIT_WIDTH COLON k= NUM | SKOLEM_DEPTH COLON k= NUM | FLATTEN COLON t= ( TRUE | FALSE ) )
+            // src/Kodkodi.g:774:60: ( SOLVER COLON s1= STR_LITERAL ( COMMA s2= STR_LITERAL )* | SYMMETRY_BREAKING COLON k= NUM | SHARING COLON k= NUM | BIT_WIDTH COLON k= NUM | SKOLEM_DEPTH COLON k= NUM | FLATTEN COLON t= ( TRUE | FALSE ) )
             int alt8=6;
             switch ( input.LA(1) ) {
             case SOLVER:
@@ -1117,13 +1136,13 @@ public class KodkodiParser extends Parser {
 
             switch (alt8) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:754:9: SOLVER COLON s1= STR_LITERAL ( COMMA s2= STR_LITERAL )*
+                    // src/Kodkodi.g:775:9: SOLVER COLON s1= STR_LITERAL ( COMMA s2= STR_LITERAL )*
                     {
                     match(input,SOLVER,FOLLOW_SOLVER_in_option166); 
                     match(input,COLON,FOLLOW_COLON_in_option168); 
                     s1=(Token)match(input,STR_LITERAL,FOLLOW_STR_LITERAL_in_option174); 
                      strs.add(sstr(s1)); 
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:755:9: ( COMMA s2= STR_LITERAL )*
+                    // src/Kodkodi.g:776:9: ( COMMA s2= STR_LITERAL )*
                     loop7:
                     do {
                         int alt7=2;
@@ -1136,7 +1155,7 @@ public class KodkodiParser extends Parser {
 
                         switch (alt7) {
                     	case 1 :
-                    	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:755:10: COMMA s2= STR_LITERAL
+                    	    // src/Kodkodi.g:776:10: COMMA s2= STR_LITERAL
                     	    {
                     	    match(input,COMMA,FOLLOW_COMMA_in_option187); 
                     	    s2=(Token)match(input,STR_LITERAL,FOLLOW_STR_LITERAL_in_option193); 
@@ -1167,6 +1186,9 @@ public class KodkodiParser extends Parser {
                                     solver = SATFactory.MiniSatProver;
                                 } else if (strs.elementAt(0).equals("MiniSat")) {
                                     solver = SATFactory.MiniSat;
+                                } else if (strs.elementAt(0).equals("MiniSat.all")) {
+                                    solver = SATFactory.MiniSat;
+				    solveAll = true;
                                 } else if (strs.elementAt(0).equals("SAT4J")) {
                                     expected = 2;
                                     if (strs.size() >= 2)
@@ -1197,7 +1219,6 @@ public class KodkodiParser extends Parser {
                                                                              args);
                                     }
                                 }
-
                                 if (solver != null) {
                                     options.setSolver(solver);
                                 } else {
@@ -1214,7 +1235,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 2 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:815:9: SYMMETRY_BREAKING COLON k= NUM
+                    // src/Kodkodi.g:838:9: SYMMETRY_BREAKING COLON k= NUM
                     {
                     match(input,SYMMETRY_BREAKING,FOLLOW_SYMMETRY_BREAKING_in_option211); 
                     match(input,COLON,FOLLOW_COLON_in_option213); 
@@ -1231,7 +1252,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 3 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:823:9: SHARING COLON k= NUM
+                    // src/Kodkodi.g:846:9: SHARING COLON k= NUM
                     {
                     match(input,SHARING,FOLLOW_SHARING_in_option233); 
                     match(input,COLON,FOLLOW_COLON_in_option235); 
@@ -1247,7 +1268,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 4 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:830:9: BIT_WIDTH COLON k= NUM
+                    // src/Kodkodi.g:853:9: BIT_WIDTH COLON k= NUM
                     {
                     match(input,BIT_WIDTH,FOLLOW_BIT_WIDTH_in_option255); 
                     match(input,COLON,FOLLOW_COLON_in_option257); 
@@ -1263,7 +1284,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 5 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:837:9: SKOLEM_DEPTH COLON k= NUM
+                    // src/Kodkodi.g:860:9: SKOLEM_DEPTH COLON k= NUM
                     {
                     match(input,SKOLEM_DEPTH,FOLLOW_SKOLEM_DEPTH_in_option277); 
                     match(input,COLON,FOLLOW_COLON_in_option279); 
@@ -1279,7 +1300,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 6 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:844:9: FLATTEN COLON t= ( TRUE | FALSE )
+                    // src/Kodkodi.g:867:9: FLATTEN COLON t= ( TRUE | FALSE )
                     {
                     match(input,FLATTEN,FOLLOW_FLATTEN_in_option299); 
                     match(input,COLON,FOLLOW_COLON_in_option301); 
@@ -1314,13 +1335,13 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "univ_spec"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:847:1: univ_spec : UNIV COLON n= UNIV_NAME ;
+    // src/Kodkodi.g:870:1: univ_spec : UNIV COLON n= UNIV_NAME ;
     public final void univ_spec() throws RecognitionException {
         Token n=null;
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:847:10: ( UNIV COLON n= UNIV_NAME )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:848:9: UNIV COLON n= UNIV_NAME
+            // src/Kodkodi.g:870:10: ( UNIV COLON n= UNIV_NAME )
+            // src/Kodkodi.g:871:9: UNIV COLON n= UNIV_NAME
             {
             match(input,UNIV,FOLLOW_UNIV_in_univ_spec329); 
             match(input,COLON,FOLLOW_COLON_in_univ_spec331); 
@@ -1354,7 +1375,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "tuple_reg_directive"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:861:1: tuple_reg_directive : (r= TUPLE_SET_REG c= COLON_EQ s= tuple_set[arity($r.text)] | r= TUPLE_REG c= COLON_EQ t= tuple[arity($r.text)] );
+    // src/Kodkodi.g:884:1: tuple_reg_directive : (r= TUPLE_SET_REG c= COLON_EQ s= tuple_set[arity($r.text)] | r= TUPLE_REG c= COLON_EQ t= tuple[arity($r.text)] );
     public final void tuple_reg_directive() throws RecognitionException {
         Token r=null;
         Token c=null;
@@ -1364,7 +1385,7 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:861:20: (r= TUPLE_SET_REG c= COLON_EQ s= tuple_set[arity($r.text)] | r= TUPLE_REG c= COLON_EQ t= tuple[arity($r.text)] )
+            // src/Kodkodi.g:884:20: (r= TUPLE_SET_REG c= COLON_EQ s= tuple_set[arity($r.text)] | r= TUPLE_REG c= COLON_EQ t= tuple[arity($r.text)] )
             int alt9=2;
             int LA9_0 = input.LA(1);
 
@@ -1382,7 +1403,7 @@ public class KodkodiParser extends Parser {
             }
             switch (alt9) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:862:9: r= TUPLE_SET_REG c= COLON_EQ s= tuple_set[arity($r.text)]
+                    // src/Kodkodi.g:885:9: r= TUPLE_SET_REG c= COLON_EQ s= tuple_set[arity($r.text)]
                     {
                     r=(Token)match(input,TUPLE_SET_REG,FOLLOW_TUPLE_SET_REG_in_tuple_reg_directive357); 
                     c=(Token)match(input,COLON_EQ,FOLLOW_COLON_EQ_in_tuple_reg_directive363); 
@@ -1403,7 +1424,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 2 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:870:9: r= TUPLE_REG c= COLON_EQ t= tuple[arity($r.text)]
+                    // src/Kodkodi.g:893:9: r= TUPLE_REG c= COLON_EQ t= tuple[arity($r.text)]
                     {
                     r=(Token)match(input,TUPLE_REG,FOLLOW_TUPLE_REG_in_tuple_reg_directive388); 
                     c=(Token)match(input,COLON_EQ,FOLLOW_COLON_EQ_in_tuple_reg_directive394); 
@@ -1438,7 +1459,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "bound_spec"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:878:1: bound_spec returns [List<Relation> relations = new ArrayList<Relation>()] : BOUNDS n1= RELATION_NAME ( COMMA n2= RELATION_NAME )* c= COLON (s1= tuple_set[$relations.get(0).arity()] | BRACKET_LEFT s1= tuple_set[$relations.get(0).arity()] COMMA s2= tuple_set[$relations.get(0).arity()] BRACKET_RIGHT ) ;
+    // src/Kodkodi.g:901:1: bound_spec returns [List<Relation> relations = new ArrayList<Relation>()] : BOUNDS n1= RELATION_NAME ( COMMA n2= RELATION_NAME )* c= COLON (s1= tuple_set[$relations.get(0).arity()] | BRACKET_LEFT s1= tuple_set[$relations.get(0).arity()] COMMA s2= tuple_set[$relations.get(0).arity()] BRACKET_RIGHT ) ;
     public final List<Relation> bound_spec() throws RecognitionException {
         List<Relation> relations =  new ArrayList<Relation>();
 
@@ -1451,13 +1472,13 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:878:74: ( BOUNDS n1= RELATION_NAME ( COMMA n2= RELATION_NAME )* c= COLON (s1= tuple_set[$relations.get(0).arity()] | BRACKET_LEFT s1= tuple_set[$relations.get(0).arity()] COMMA s2= tuple_set[$relations.get(0).arity()] BRACKET_RIGHT ) )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:879:9: BOUNDS n1= RELATION_NAME ( COMMA n2= RELATION_NAME )* c= COLON (s1= tuple_set[$relations.get(0).arity()] | BRACKET_LEFT s1= tuple_set[$relations.get(0).arity()] COMMA s2= tuple_set[$relations.get(0).arity()] BRACKET_RIGHT )
+            // src/Kodkodi.g:901:74: ( BOUNDS n1= RELATION_NAME ( COMMA n2= RELATION_NAME )* c= COLON (s1= tuple_set[$relations.get(0).arity()] | BRACKET_LEFT s1= tuple_set[$relations.get(0).arity()] COMMA s2= tuple_set[$relations.get(0).arity()] BRACKET_RIGHT ) )
+            // src/Kodkodi.g:902:9: BOUNDS n1= RELATION_NAME ( COMMA n2= RELATION_NAME )* c= COLON (s1= tuple_set[$relations.get(0).arity()] | BRACKET_LEFT s1= tuple_set[$relations.get(0).arity()] COMMA s2= tuple_set[$relations.get(0).arity()] BRACKET_RIGHT )
             {
             match(input,BOUNDS,FOLLOW_BOUNDS_in_bound_spec421); 
             n1=(Token)match(input,RELATION_NAME,FOLLOW_RELATION_NAME_in_bound_spec427); 
              relations.add(getRelation(n1)); 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:880:9: ( COMMA n2= RELATION_NAME )*
+            // src/Kodkodi.g:903:9: ( COMMA n2= RELATION_NAME )*
             loop10:
             do {
                 int alt10=2;
@@ -1470,7 +1491,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt10) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:880:10: COMMA n2= RELATION_NAME
+            	    // src/Kodkodi.g:903:10: COMMA n2= RELATION_NAME
             	    {
             	    match(input,COMMA,FOLLOW_COMMA_in_bound_spec440); 
             	    n2=(Token)match(input,RELATION_NAME,FOLLOW_RELATION_NAME_in_bound_spec446); 
@@ -1485,7 +1506,7 @@ public class KodkodiParser extends Parser {
             } while (true);
 
             c=(Token)match(input,COLON,FOLLOW_COLON_in_bound_spec464); 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:882:9: (s1= tuple_set[$relations.get(0).arity()] | BRACKET_LEFT s1= tuple_set[$relations.get(0).arity()] COMMA s2= tuple_set[$relations.get(0).arity()] BRACKET_RIGHT )
+            // src/Kodkodi.g:905:9: (s1= tuple_set[$relations.get(0).arity()] | BRACKET_LEFT s1= tuple_set[$relations.get(0).arity()] COMMA s2= tuple_set[$relations.get(0).arity()] BRACKET_RIGHT )
             int alt11=2;
             int LA11_0 = input.LA(1);
 
@@ -1503,7 +1524,7 @@ public class KodkodiParser extends Parser {
             }
             switch (alt11) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:882:10: s1= tuple_set[$relations.get(0).arity()]
+                    // src/Kodkodi.g:905:10: s1= tuple_set[$relations.get(0).arity()]
                     {
                     pushFollow(FOLLOW_tuple_set_in_bound_spec479);
                     s1=tuple_set(relations.get(0).arity());
@@ -1514,7 +1535,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 2 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:883:10: BRACKET_LEFT s1= tuple_set[$relations.get(0).arity()] COMMA s2= tuple_set[$relations.get(0).arity()] BRACKET_RIGHT
+                    // src/Kodkodi.g:906:10: BRACKET_LEFT s1= tuple_set[$relations.get(0).arity()] COMMA s2= tuple_set[$relations.get(0).arity()] BRACKET_RIGHT
                     {
                     match(input,BRACKET_LEFT,FOLLOW_BRACKET_LEFT_in_bound_spec493); 
                     pushFollow(FOLLOW_tuple_set_in_bound_spec499);
@@ -1574,11 +1595,11 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "int_bound_spec"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:907:1: int_bound_spec : INT_BOUNDS COLON q= int_bound_seq ( COMMA q= int_bound_seq )* ;
+    // src/Kodkodi.g:930:1: int_bound_spec : INT_BOUNDS COLON q= int_bound_seq ( COMMA q= int_bound_seq )* ;
     public final void int_bound_spec() throws RecognitionException {
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:907:15: ( INT_BOUNDS COLON q= int_bound_seq ( COMMA q= int_bound_seq )* )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:908:9: INT_BOUNDS COLON q= int_bound_seq ( COMMA q= int_bound_seq )*
+            // src/Kodkodi.g:930:15: ( INT_BOUNDS COLON q= int_bound_seq ( COMMA q= int_bound_seq )* )
+            // src/Kodkodi.g:931:9: INT_BOUNDS COLON q= int_bound_seq ( COMMA q= int_bound_seq )*
             {
             match(input,INT_BOUNDS,FOLLOW_INT_BOUNDS_in_int_bound_spec537); 
             match(input,COLON,FOLLOW_COLON_in_int_bound_spec539); 
@@ -1587,7 +1608,7 @@ public class KodkodiParser extends Parser {
 
             state._fsp--;
 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:908:44: ( COMMA q= int_bound_seq )*
+            // src/Kodkodi.g:931:44: ( COMMA q= int_bound_seq )*
             loop12:
             do {
                 int alt12=2;
@@ -1600,7 +1621,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt12) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:908:45: COMMA q= int_bound_seq
+            	    // src/Kodkodi.g:931:45: COMMA q= int_bound_seq
             	    {
             	    match(input,COMMA,FOLLOW_COMMA_in_int_bound_spec548); 
             	    pushFollow(FOLLOW_int_bound_seq_in_int_bound_spec554);
@@ -1633,14 +1654,14 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "expr_reg_directive"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:909:1: expr_reg_directive : (r= FORMULA_REG COLON_EQ e= expr | r= REL_EXPR_REG COLON_EQ e= expr | r= INT_EXPR_REG COLON_EQ e= expr );
+    // src/Kodkodi.g:932:1: expr_reg_directive : (r= FORMULA_REG COLON_EQ e= expr | r= REL_EXPR_REG COLON_EQ e= expr | r= INT_EXPR_REG COLON_EQ e= expr );
     public final void expr_reg_directive() throws RecognitionException {
         Token r=null;
         Object e = null;
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:909:19: (r= FORMULA_REG COLON_EQ e= expr | r= REL_EXPR_REG COLON_EQ e= expr | r= INT_EXPR_REG COLON_EQ e= expr )
+            // src/Kodkodi.g:932:19: (r= FORMULA_REG COLON_EQ e= expr | r= REL_EXPR_REG COLON_EQ e= expr | r= INT_EXPR_REG COLON_EQ e= expr )
             int alt13=3;
             switch ( input.LA(1) ) {
             case FORMULA_REG:
@@ -1667,7 +1688,7 @@ public class KodkodiParser extends Parser {
 
             switch (alt13) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:910:9: r= FORMULA_REG COLON_EQ e= expr
+                    // src/Kodkodi.g:933:9: r= FORMULA_REG COLON_EQ e= expr
                     {
                     r=(Token)match(input,FORMULA_REG,FOLLOW_FORMULA_REG_in_expr_reg_directive574); 
                     match(input,COLON_EQ,FOLLOW_COLON_EQ_in_expr_reg_directive576); 
@@ -1681,7 +1702,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 2 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:911:9: r= REL_EXPR_REG COLON_EQ e= expr
+                    // src/Kodkodi.g:934:9: r= REL_EXPR_REG COLON_EQ e= expr
                     {
                     r=(Token)match(input,REL_EXPR_REG,FOLLOW_REL_EXPR_REG_in_expr_reg_directive600); 
                     match(input,COLON_EQ,FOLLOW_COLON_EQ_in_expr_reg_directive602); 
@@ -1695,7 +1716,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 3 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:912:9: r= INT_EXPR_REG COLON_EQ e= expr
+                    // src/Kodkodi.g:935:9: r= INT_EXPR_REG COLON_EQ e= expr
                     {
                     r=(Token)match(input,INT_EXPR_REG,FOLLOW_INT_EXPR_REG_in_expr_reg_directive626); 
                     match(input,COLON_EQ,FOLLOW_COLON_EQ_in_expr_reg_directive628); 
@@ -1723,15 +1744,15 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "solve_directive"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:913:1: solve_directive : s= SOLVE e= expr SEMICOLON ;
+    // src/Kodkodi.g:936:1: solve_directive : s= SOLVE e= expr SEMICOLON ;
     public final void solve_directive() throws RecognitionException {
         Token s=null;
         Object e = null;
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:913:16: (s= SOLVE e= expr SEMICOLON )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:914:9: s= SOLVE e= expr SEMICOLON
+            // src/Kodkodi.g:936:16: (s= SOLVE e= expr SEMICOLON )
+            // src/Kodkodi.g:937:9: s= SOLVE e= expr SEMICOLON
             {
             s=(Token)match(input,SOLVE,FOLLOW_SOLVE_in_solve_directive654); 
             pushFollow(FOLLOW_expr_in_solve_directive660);
@@ -1752,8 +1773,8 @@ public class KodkodiParser extends Parser {
                         Runnable task = new Runnable() {
                             public void run() {
                                 try {
-                                    solve(token, problemNo, parsingTime, options, universe,
-                                          bounds, formula);
+                                    solve(token, problemNo, parsingTime, options, 
+                                          universe, bounds, formula);
                                 } catch (Exception except) {
                                     String message = except.getMessage();
                                     if (message.length() == 0)
@@ -1785,17 +1806,17 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "int_bound_seq"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:944:1: int_bound_seq : (k= NUM COLON )? q= tuple_set_seq[1] ;
+    // src/Kodkodi.g:967:1: int_bound_seq : (k= NUM COLON )? q= tuple_set_seq[1] ;
     public final void int_bound_seq() throws RecognitionException {
         Token k=null;
         KodkodiParser.tuple_set_seq_return q = null;
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:944:14: ( (k= NUM COLON )? q= tuple_set_seq[1] )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:945:9: (k= NUM COLON )? q= tuple_set_seq[1]
+            // src/Kodkodi.g:967:14: ( (k= NUM COLON )? q= tuple_set_seq[1] )
+            // src/Kodkodi.g:968:9: (k= NUM COLON )? q= tuple_set_seq[1]
             {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:945:9: (k= NUM COLON )?
+            // src/Kodkodi.g:968:9: (k= NUM COLON )?
             int alt14=2;
             int LA14_0 = input.LA(1);
 
@@ -1804,7 +1825,7 @@ public class KodkodiParser extends Parser {
             }
             switch (alt14) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:945:10: k= NUM COLON
+                    // src/Kodkodi.g:968:10: k= NUM COLON
                     {
                     k=(Token)match(input,NUM,FOLLOW_NUM_in_int_bound_seq684); 
                     match(input,COLON,FOLLOW_COLON_in_int_bound_seq686); 
@@ -1851,7 +1872,7 @@ public class KodkodiParser extends Parser {
     };
 
     // $ANTLR start "tuple_set_seq"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:957:1: tuple_set_seq[int arity] returns [Token token, List<TupleSet> value = new ArrayList<TupleSet>()] : b= BRACKET_LEFT (s1= tuple_set[$arity] ( COMMA s2= tuple_set[$arity] )* )? BRACKET_RIGHT ;
+    // src/Kodkodi.g:980:1: tuple_set_seq[int arity] returns [Token token, List<TupleSet> value = new ArrayList<TupleSet>()] : b= BRACKET_LEFT (s1= tuple_set[$arity] ( COMMA s2= tuple_set[$arity] )* )? BRACKET_RIGHT ;
     public final KodkodiParser.tuple_set_seq_return tuple_set_seq(int arity) throws RecognitionException {
         KodkodiParser.tuple_set_seq_return retval = new KodkodiParser.tuple_set_seq_return();
         retval.start = input.LT(1);
@@ -1863,11 +1884,11 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:958:77: (b= BRACKET_LEFT (s1= tuple_set[$arity] ( COMMA s2= tuple_set[$arity] )* )? BRACKET_RIGHT )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:959:9: b= BRACKET_LEFT (s1= tuple_set[$arity] ( COMMA s2= tuple_set[$arity] )* )? BRACKET_RIGHT
+            // src/Kodkodi.g:981:77: (b= BRACKET_LEFT (s1= tuple_set[$arity] ( COMMA s2= tuple_set[$arity] )* )? BRACKET_RIGHT )
+            // src/Kodkodi.g:982:9: b= BRACKET_LEFT (s1= tuple_set[$arity] ( COMMA s2= tuple_set[$arity] )* )? BRACKET_RIGHT
             {
             b=(Token)match(input,BRACKET_LEFT,FOLLOW_BRACKET_LEFT_in_tuple_set_seq725); 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:959:26: (s1= tuple_set[$arity] ( COMMA s2= tuple_set[$arity] )* )?
+            // src/Kodkodi.g:982:26: (s1= tuple_set[$arity] ( COMMA s2= tuple_set[$arity] )* )?
             int alt16=2;
             int LA16_0 = input.LA(1);
 
@@ -1876,7 +1897,7 @@ public class KodkodiParser extends Parser {
             }
             switch (alt16) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:959:27: s1= tuple_set[$arity] ( COMMA s2= tuple_set[$arity] )*
+                    // src/Kodkodi.g:982:27: s1= tuple_set[$arity] ( COMMA s2= tuple_set[$arity] )*
                     {
                     pushFollow(FOLLOW_tuple_set_in_tuple_set_seq732);
                     s1=tuple_set(arity);
@@ -1887,7 +1908,7 @@ public class KodkodiParser extends Parser {
                                 retval.token = b;
                                 retval.value.add(s1);
                             
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:962:11: ( COMMA s2= tuple_set[$arity] )*
+                    // src/Kodkodi.g:985:11: ( COMMA s2= tuple_set[$arity] )*
                     loop15:
                     do {
                         int alt15=2;
@@ -1900,7 +1921,7 @@ public class KodkodiParser extends Parser {
 
                         switch (alt15) {
                     	case 1 :
-                    	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:962:12: COMMA s2= tuple_set[$arity]
+                    	    // src/Kodkodi.g:985:12: COMMA s2= tuple_set[$arity]
                     	    {
                     	    match(input,COMMA,FOLLOW_COMMA_in_tuple_set_seq738); 
                     	    pushFollow(FOLLOW_tuple_set_in_tuple_set_seq744);
@@ -1943,7 +1964,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "tuple_set"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:965:1: tuple_set[int arity] returns [TupleSet value] : s1= intersect_tuple_set[$arity] (t= ( PLUS | MINUS ) s2= intersect_tuple_set[$arity] )* ;
+    // src/Kodkodi.g:988:1: tuple_set[int arity] returns [TupleSet value] : s1= intersect_tuple_set[$arity] (t= ( PLUS | MINUS ) s2= intersect_tuple_set[$arity] )* ;
     public final TupleSet tuple_set(int arity) throws RecognitionException {
         TupleSet value = null;
 
@@ -1954,8 +1975,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:965:46: (s1= intersect_tuple_set[$arity] (t= ( PLUS | MINUS ) s2= intersect_tuple_set[$arity] )* )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:966:9: s1= intersect_tuple_set[$arity] (t= ( PLUS | MINUS ) s2= intersect_tuple_set[$arity] )*
+            // src/Kodkodi.g:988:46: (s1= intersect_tuple_set[$arity] (t= ( PLUS | MINUS ) s2= intersect_tuple_set[$arity] )* )
+            // src/Kodkodi.g:989:9: s1= intersect_tuple_set[$arity] (t= ( PLUS | MINUS ) s2= intersect_tuple_set[$arity] )*
             {
             pushFollow(FOLLOW_intersect_tuple_set_in_tuple_set784);
             s1=intersect_tuple_set(arity);
@@ -1963,7 +1984,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              value = s1; 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:967:9: (t= ( PLUS | MINUS ) s2= intersect_tuple_set[$arity] )*
+            // src/Kodkodi.g:990:9: (t= ( PLUS | MINUS ) s2= intersect_tuple_set[$arity] )*
             loop17:
             do {
                 int alt17=2;
@@ -1976,7 +1997,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt17) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:967:10: t= ( PLUS | MINUS ) s2= intersect_tuple_set[$arity]
+            	    // src/Kodkodi.g:990:10: t= ( PLUS | MINUS ) s2= intersect_tuple_set[$arity]
             	    {
             	    t=(Token)input.LT(1);
             	    if ( (input.LA(1)>=PLUS && input.LA(1)<=MINUS) ) {
@@ -2029,7 +2050,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "intersect_tuple_set"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:978:1: intersect_tuple_set[int arity] returns [TupleSet value] : s1= product_tuple_set[$arity] (a= AND s2= product_tuple_set[$arity] )* ;
+    // src/Kodkodi.g:1001:1: intersect_tuple_set[int arity] returns [TupleSet value] : s1= product_tuple_set[$arity] (a= AND s2= product_tuple_set[$arity] )* ;
     public final TupleSet intersect_tuple_set(int arity) throws RecognitionException {
         TupleSet value = null;
 
@@ -2040,8 +2061,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:978:56: (s1= product_tuple_set[$arity] (a= AND s2= product_tuple_set[$arity] )* )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:979:9: s1= product_tuple_set[$arity] (a= AND s2= product_tuple_set[$arity] )*
+            // src/Kodkodi.g:1001:56: (s1= product_tuple_set[$arity] (a= AND s2= product_tuple_set[$arity] )* )
+            // src/Kodkodi.g:1002:9: s1= product_tuple_set[$arity] (a= AND s2= product_tuple_set[$arity] )*
             {
             pushFollow(FOLLOW_product_tuple_set_in_intersect_tuple_set842);
             s1=product_tuple_set(arity);
@@ -2049,7 +2070,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              value = s1; 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:980:9: (a= AND s2= product_tuple_set[$arity] )*
+            // src/Kodkodi.g:1003:9: (a= AND s2= product_tuple_set[$arity] )*
             loop18:
             do {
                 int alt18=2;
@@ -2062,7 +2083,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt18) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:980:10: a= AND s2= product_tuple_set[$arity]
+            	    // src/Kodkodi.g:1003:10: a= AND s2= product_tuple_set[$arity]
             	    {
             	    a=(Token)match(input,AND,FOLLOW_AND_in_intersect_tuple_set860); 
             	    pushFollow(FOLLOW_product_tuple_set_in_intersect_tuple_set866);
@@ -2102,7 +2123,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "product_tuple_set"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:987:1: product_tuple_set[int arity] returns [TupleSet value] : s1= project_tuple_set[$arity] (a= ARROW s2= project_tuple_set[$arity] )* ;
+    // src/Kodkodi.g:1010:1: product_tuple_set[int arity] returns [TupleSet value] : s1= project_tuple_set[$arity] (a= ARROW s2= project_tuple_set[$arity] )* ;
     public final TupleSet product_tuple_set(int arity) throws RecognitionException {
         TupleSet value = null;
 
@@ -2113,8 +2134,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:987:54: (s1= project_tuple_set[$arity] (a= ARROW s2= project_tuple_set[$arity] )* )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:988:9: s1= project_tuple_set[$arity] (a= ARROW s2= project_tuple_set[$arity] )*
+            // src/Kodkodi.g:1010:54: (s1= project_tuple_set[$arity] (a= ARROW s2= project_tuple_set[$arity] )* )
+            // src/Kodkodi.g:1011:9: s1= project_tuple_set[$arity] (a= ARROW s2= project_tuple_set[$arity] )*
             {
             pushFollow(FOLLOW_project_tuple_set_in_product_tuple_set894);
             s1=project_tuple_set(arity);
@@ -2122,7 +2143,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              value = s1; 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:989:9: (a= ARROW s2= project_tuple_set[$arity] )*
+            // src/Kodkodi.g:1012:9: (a= ARROW s2= project_tuple_set[$arity] )*
             loop19:
             do {
                 int alt19=2;
@@ -2135,7 +2156,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt19) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:989:10: a= ARROW s2= project_tuple_set[$arity]
+            	    // src/Kodkodi.g:1012:10: a= ARROW s2= project_tuple_set[$arity]
             	    {
             	    a=(Token)match(input,ARROW,FOLLOW_ARROW_in_product_tuple_set912); 
             	    pushFollow(FOLLOW_project_tuple_set_in_product_tuple_set918);
@@ -2175,7 +2196,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "project_tuple_set"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:996:1: project_tuple_set[int arity] returns [TupleSet value] : s= basic_tuple_set[$arity] ( BRACKET_LEFT k= NUM BRACKET_RIGHT )* ;
+    // src/Kodkodi.g:1019:1: project_tuple_set[int arity] returns [TupleSet value] : s= basic_tuple_set[$arity] ( BRACKET_LEFT k= NUM BRACKET_RIGHT )* ;
     public final TupleSet project_tuple_set(int arity) throws RecognitionException {
         TupleSet value = null;
 
@@ -2184,8 +2205,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:996:54: (s= basic_tuple_set[$arity] ( BRACKET_LEFT k= NUM BRACKET_RIGHT )* )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:997:9: s= basic_tuple_set[$arity] ( BRACKET_LEFT k= NUM BRACKET_RIGHT )*
+            // src/Kodkodi.g:1019:54: (s= basic_tuple_set[$arity] ( BRACKET_LEFT k= NUM BRACKET_RIGHT )* )
+            // src/Kodkodi.g:1020:9: s= basic_tuple_set[$arity] ( BRACKET_LEFT k= NUM BRACKET_RIGHT )*
             {
             pushFollow(FOLLOW_basic_tuple_set_in_project_tuple_set946);
             s=basic_tuple_set(arity);
@@ -2193,7 +2214,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              value = (s!=null?s.value:null); 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:998:9: ( BRACKET_LEFT k= NUM BRACKET_RIGHT )*
+            // src/Kodkodi.g:1021:9: ( BRACKET_LEFT k= NUM BRACKET_RIGHT )*
             loop20:
             do {
                 int alt20=2;
@@ -2206,7 +2227,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt20) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:998:10: BRACKET_LEFT k= NUM BRACKET_RIGHT
+            	    // src/Kodkodi.g:1021:10: BRACKET_LEFT k= NUM BRACKET_RIGHT
             	    {
             	    match(input,BRACKET_LEFT,FOLLOW_BRACKET_LEFT_in_project_tuple_set960); 
             	    k=(Token)match(input,NUM,FOLLOW_NUM_in_project_tuple_set966); 
@@ -2249,7 +2270,7 @@ public class KodkodiParser extends Parser {
     };
 
     // $ANTLR start "basic_tuple_set"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1007:1: basic_tuple_set[int arity] returns [TupleSet value, List<Tuple> list = new ArrayList<Tuple>()] : (n= ( UNIV_NAME | OFFSET_UNIV_NAME ) | PAREN_LEFT s= tuple_set[$arity] PAREN_RIGHT | b= BRACE_LEFT (t1= tuple[$arity] ( ( COMMA t2= tuple[$arity] )* | dd= DOT_DOT t2= tuple[$arity] | h= HASH t2= tuple[$arity] ) | ) BRACE_RIGHT | n= NONE | a= ALL | r= TUPLE_SET_REG );
+    // src/Kodkodi.g:1030:1: basic_tuple_set[int arity] returns [TupleSet value, List<Tuple> list = new ArrayList<Tuple>()] : (n= ( UNIV_NAME | OFFSET_UNIV_NAME ) | PAREN_LEFT s= tuple_set[$arity] PAREN_RIGHT | b= BRACE_LEFT (t1= tuple[$arity] ( ( COMMA t2= tuple[$arity] )* | dd= DOT_DOT t2= tuple[$arity] | h= HASH t2= tuple[$arity] ) | ) BRACE_RIGHT | n= NONE | a= ALL | r= TUPLE_SET_REG );
     public final KodkodiParser.basic_tuple_set_return basic_tuple_set(int arity) throws RecognitionException {
         KodkodiParser.basic_tuple_set_return retval = new KodkodiParser.basic_tuple_set_return();
         retval.start = input.LT(1);
@@ -2268,7 +2289,7 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1008:75: (n= ( UNIV_NAME | OFFSET_UNIV_NAME ) | PAREN_LEFT s= tuple_set[$arity] PAREN_RIGHT | b= BRACE_LEFT (t1= tuple[$arity] ( ( COMMA t2= tuple[$arity] )* | dd= DOT_DOT t2= tuple[$arity] | h= HASH t2= tuple[$arity] ) | ) BRACE_RIGHT | n= NONE | a= ALL | r= TUPLE_SET_REG )
+            // src/Kodkodi.g:1031:75: (n= ( UNIV_NAME | OFFSET_UNIV_NAME ) | PAREN_LEFT s= tuple_set[$arity] PAREN_RIGHT | b= BRACE_LEFT (t1= tuple[$arity] ( ( COMMA t2= tuple[$arity] )* | dd= DOT_DOT t2= tuple[$arity] | h= HASH t2= tuple[$arity] ) | ) BRACE_RIGHT | n= NONE | a= ALL | r= TUPLE_SET_REG )
             int alt24=6;
             switch ( input.LA(1) ) {
             case UNIV_NAME:
@@ -2311,7 +2332,7 @@ public class KodkodiParser extends Parser {
 
             switch (alt24) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1009:9: n= ( UNIV_NAME | OFFSET_UNIV_NAME )
+                    // src/Kodkodi.g:1032:9: n= ( UNIV_NAME | OFFSET_UNIV_NAME )
                     {
                     n=(Token)input.LT(1);
                     if ( input.LA(1)==UNIV_NAME||input.LA(1)==OFFSET_UNIV_NAME ) {
@@ -2330,7 +2351,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 2 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1012:9: PAREN_LEFT s= tuple_set[$arity] PAREN_RIGHT
+                    // src/Kodkodi.g:1035:9: PAREN_LEFT s= tuple_set[$arity] PAREN_RIGHT
                     {
                     match(input,PAREN_LEFT,FOLLOW_PAREN_LEFT_in_basic_tuple_set1022); 
                     pushFollow(FOLLOW_tuple_set_in_basic_tuple_set1028);
@@ -2344,10 +2365,10 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 3 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1013:9: b= BRACE_LEFT (t1= tuple[$arity] ( ( COMMA t2= tuple[$arity] )* | dd= DOT_DOT t2= tuple[$arity] | h= HASH t2= tuple[$arity] ) | ) BRACE_RIGHT
+                    // src/Kodkodi.g:1036:9: b= BRACE_LEFT (t1= tuple[$arity] ( ( COMMA t2= tuple[$arity] )* | dd= DOT_DOT t2= tuple[$arity] | h= HASH t2= tuple[$arity] ) | ) BRACE_RIGHT
                     {
                     b=(Token)match(input,BRACE_LEFT,FOLLOW_BRACE_LEFT_in_basic_tuple_set1049); 
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1014:9: (t1= tuple[$arity] ( ( COMMA t2= tuple[$arity] )* | dd= DOT_DOT t2= tuple[$arity] | h= HASH t2= tuple[$arity] ) | )
+                    // src/Kodkodi.g:1037:9: (t1= tuple[$arity] ( ( COMMA t2= tuple[$arity] )* | dd= DOT_DOT t2= tuple[$arity] | h= HASH t2= tuple[$arity] ) | )
                     int alt23=2;
                     int LA23_0 = input.LA(1);
 
@@ -2365,14 +2386,14 @@ public class KodkodiParser extends Parser {
                     }
                     switch (alt23) {
                         case 1 :
-                            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1014:10: t1= tuple[$arity] ( ( COMMA t2= tuple[$arity] )* | dd= DOT_DOT t2= tuple[$arity] | h= HASH t2= tuple[$arity] )
+                            // src/Kodkodi.g:1037:10: t1= tuple[$arity] ( ( COMMA t2= tuple[$arity] )* | dd= DOT_DOT t2= tuple[$arity] | h= HASH t2= tuple[$arity] )
                             {
                             pushFollow(FOLLOW_tuple_in_basic_tuple_set1064);
                             t1=tuple(arity);
 
                             state._fsp--;
 
-                            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1015:10: ( ( COMMA t2= tuple[$arity] )* | dd= DOT_DOT t2= tuple[$arity] | h= HASH t2= tuple[$arity] )
+                            // src/Kodkodi.g:1038:10: ( ( COMMA t2= tuple[$arity] )* | dd= DOT_DOT t2= tuple[$arity] | h= HASH t2= tuple[$arity] )
                             int alt22=3;
                             switch ( input.LA(1) ) {
                             case COMMA:
@@ -2400,12 +2421,12 @@ public class KodkodiParser extends Parser {
 
                             switch (alt22) {
                                 case 1 :
-                                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1015:11: ( COMMA t2= tuple[$arity] )*
+                                    // src/Kodkodi.g:1038:11: ( COMMA t2= tuple[$arity] )*
                                     {
 
                                                   retval.list.add((t1!=null?t1.value:null));
                                               
-                                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1017:13: ( COMMA t2= tuple[$arity] )*
+                                    // src/Kodkodi.g:1040:13: ( COMMA t2= tuple[$arity] )*
                                     loop21:
                                     do {
                                         int alt21=2;
@@ -2418,7 +2439,7 @@ public class KodkodiParser extends Parser {
 
                                         switch (alt21) {
                                     	case 1 :
-                                    	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1017:14: COMMA t2= tuple[$arity]
+                                    	    // src/Kodkodi.g:1040:14: COMMA t2= tuple[$arity]
                                     	    {
                                     	    match(input,COMMA,FOLLOW_COMMA_in_basic_tuple_set1080); 
                                     	    pushFollow(FOLLOW_tuple_in_basic_tuple_set1086);
@@ -2449,7 +2470,7 @@ public class KodkodiParser extends Parser {
                                     }
                                     break;
                                 case 2 :
-                                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1026:11: dd= DOT_DOT t2= tuple[$arity]
+                                    // src/Kodkodi.g:1049:11: dd= DOT_DOT t2= tuple[$arity]
                                     {
                                     dd=(Token)match(input,DOT_DOT,FOLLOW_DOT_DOT_in_basic_tuple_set1111); 
                                     pushFollow(FOLLOW_tuple_in_basic_tuple_set1117);
@@ -2472,7 +2493,7 @@ public class KodkodiParser extends Parser {
                                     }
                                     break;
                                 case 3 :
-                                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1037:11: h= HASH t2= tuple[$arity]
+                                    // src/Kodkodi.g:1060:11: h= HASH t2= tuple[$arity]
                                     {
                                     h=(Token)match(input,HASH,FOLLOW_HASH_in_basic_tuple_set1138); 
                                     pushFollow(FOLLOW_tuple_in_basic_tuple_set1144);
@@ -2501,7 +2522,7 @@ public class KodkodiParser extends Parser {
                             }
                             break;
                         case 2 :
-                            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1048:10: 
+                            // src/Kodkodi.g:1071:10: 
                             {
 
                                           try {
@@ -2522,7 +2543,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 4 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1057:9: n= NONE
+                    // src/Kodkodi.g:1080:9: n= NONE
                     {
                     n=(Token)match(input,NONE,FOLLOW_NONE_in_basic_tuple_set1188); 
 
@@ -2537,7 +2558,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 5 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1065:9: a= ALL
+                    // src/Kodkodi.g:1088:9: a= ALL
                     {
                     a=(Token)match(input,ALL,FOLLOW_ALL_in_basic_tuple_set1206); 
 
@@ -2552,7 +2573,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 6 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1073:9: r= TUPLE_SET_REG
+                    // src/Kodkodi.g:1096:9: r= TUPLE_SET_REG
                     {
                     r=(Token)match(input,TUPLE_SET_REG,FOLLOW_TUPLE_SET_REG_in_basic_tuple_set1224); 
                      retval.value = getTupleSet(r); 
@@ -2580,7 +2601,7 @@ public class KodkodiParser extends Parser {
     };
 
     // $ANTLR start "tuple"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1074:1: tuple[int arity] returns [Tuple value, List<Object> atoms] : ( BRACKET_LEFT n1= ATOM_NAME ( COMMA n2= ATOM_NAME )* BRACKET_RIGHT | n= ATOM_NAME | n= TUPLE_NAME | r= TUPLE_REG );
+    // src/Kodkodi.g:1097:1: tuple[int arity] returns [Tuple value, List<Object> atoms] : ( BRACKET_LEFT n1= ATOM_NAME ( COMMA n2= ATOM_NAME )* BRACKET_RIGHT | n= ATOM_NAME | n= TUPLE_NAME | r= TUPLE_REG );
     public final KodkodiParser.tuple_return tuple(int arity) throws RecognitionException {
         KodkodiParser.tuple_return retval = new KodkodiParser.tuple_return();
         retval.start = input.LT(1);
@@ -2591,7 +2612,7 @@ public class KodkodiParser extends Parser {
         Token r=null;
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1074:59: ( BRACKET_LEFT n1= ATOM_NAME ( COMMA n2= ATOM_NAME )* BRACKET_RIGHT | n= ATOM_NAME | n= TUPLE_NAME | r= TUPLE_REG )
+            // src/Kodkodi.g:1097:59: ( BRACKET_LEFT n1= ATOM_NAME ( COMMA n2= ATOM_NAME )* BRACKET_RIGHT | n= ATOM_NAME | n= TUPLE_NAME | r= TUPLE_REG )
             int alt26=4;
             switch ( input.LA(1) ) {
             case BRACKET_LEFT:
@@ -2623,7 +2644,7 @@ public class KodkodiParser extends Parser {
 
             switch (alt26) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1075:9: BRACKET_LEFT n1= ATOM_NAME ( COMMA n2= ATOM_NAME )* BRACKET_RIGHT
+                    // src/Kodkodi.g:1098:9: BRACKET_LEFT n1= ATOM_NAME ( COMMA n2= ATOM_NAME )* BRACKET_RIGHT
                     {
                     match(input,BRACKET_LEFT,FOLLOW_BRACKET_LEFT_in_tuple1245); 
                     n1=(Token)match(input,ATOM_NAME,FOLLOW_ATOM_NAME_in_tuple1251); 
@@ -2631,7 +2652,7 @@ public class KodkodiParser extends Parser {
                                 retval.atoms = new ArrayList<Object>();
                                 retval.atoms.add(getAtom(n1));
                             
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1078:11: ( COMMA n2= ATOM_NAME )*
+                    // src/Kodkodi.g:1101:11: ( COMMA n2= ATOM_NAME )*
                     loop25:
                     do {
                         int alt25=2;
@@ -2644,7 +2665,7 @@ public class KodkodiParser extends Parser {
 
                         switch (alt25) {
                     	case 1 :
-                    	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1078:12: COMMA n2= ATOM_NAME
+                    	    // src/Kodkodi.g:1101:12: COMMA n2= ATOM_NAME
                     	    {
                     	    match(input,COMMA,FOLLOW_COMMA_in_tuple1256); 
                     	    n2=(Token)match(input,ATOM_NAME,FOLLOW_ATOM_NAME_in_tuple1262); 
@@ -2666,7 +2687,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 2 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1081:9: n= ATOM_NAME
+                    // src/Kodkodi.g:1104:9: n= ATOM_NAME
                     {
                     n=(Token)match(input,ATOM_NAME,FOLLOW_ATOM_NAME_in_tuple1286); 
 
@@ -2676,7 +2697,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 3 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1084:9: n= TUPLE_NAME
+                    // src/Kodkodi.g:1107:9: n= TUPLE_NAME
                     {
                     n=(Token)match(input,TUPLE_NAME,FOLLOW_TUPLE_NAME_in_tuple1304); 
 
@@ -2692,7 +2713,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 4 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1093:9: r= TUPLE_REG
+                    // src/Kodkodi.g:1116:9: r= TUPLE_REG
                     {
                     r=(Token)match(input,TUPLE_REG,FOLLOW_TUPLE_REG_in_tuple1322); 
                      retval.value = getTuple(r); 
@@ -2716,7 +2737,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "expr"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1095:1: expr returns [Object node] : ( ALL ds= decls b= BAR e= expr | SOME ds= decls b= BAR e= expr | SUM ds= decls b= BAR e= expr | l= LET as= assigns BAR e= expr | i= IF e= expr t= THEN e1= expr u= ELSE e2= expr | e1= iff_formula (o= OR es= or_formula_tail[$o,\n new SingletonArrayList<Formula>(F($o, $node))] )? );
+    // src/Kodkodi.g:1118:1: expr returns [Object node] : ( ALL ds= decls b= BAR e= expr | SOME ds= decls b= BAR e= expr | SUM ds= decls b= BAR e= expr | l= LET as= assigns BAR e= expr | i= IF e= expr t= THEN e1= expr u= ELSE e2= expr | e1= iff_formula (o= OR es= or_formula_tail[$o,\n new SingletonArrayList<Formula>(F($o, $node))] )? );
     public final Object expr() throws RecognitionException {
         Object node = null;
 
@@ -2740,7 +2761,7 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1095:27: ( ALL ds= decls b= BAR e= expr | SOME ds= decls b= BAR e= expr | SUM ds= decls b= BAR e= expr | l= LET as= assigns BAR e= expr | i= IF e= expr t= THEN e1= expr u= ELSE e2= expr | e1= iff_formula (o= OR es= or_formula_tail[$o,\n new SingletonArrayList<Formula>(F($o, $node))] )? )
+            // src/Kodkodi.g:1118:27: ( ALL ds= decls b= BAR e= expr | SOME ds= decls b= BAR e= expr | SUM ds= decls b= BAR e= expr | l= LET as= assigns BAR e= expr | i= IF e= expr t= THEN e1= expr u= ELSE e2= expr | e1= iff_formula (o= OR es= or_formula_tail[$o,\n new SingletonArrayList<Formula>(F($o, $node))] )? )
             int alt28=6;
             switch ( input.LA(1) ) {
             case ALL:
@@ -2841,7 +2862,7 @@ public class KodkodiParser extends Parser {
 
             switch (alt28) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1096:9: ALL ds= decls b= BAR e= expr
+                    // src/Kodkodi.g:1119:9: ALL ds= decls b= BAR e= expr
                     {
                     match(input,ALL,FOLLOW_ALL_in_expr1343); 
                     pushFollow(FOLLOW_decls_in_expr1349);
@@ -2866,7 +2887,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 2 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1103:9: SOME ds= decls b= BAR e= expr
+                    // src/Kodkodi.g:1126:9: SOME ds= decls b= BAR e= expr
                     {
                     match(input,SOME,FOLLOW_SOME_in_expr1375); 
                     pushFollow(FOLLOW_decls_in_expr1381);
@@ -2891,7 +2912,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 3 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1110:9: SUM ds= decls b= BAR e= expr
+                    // src/Kodkodi.g:1133:9: SUM ds= decls b= BAR e= expr
                     {
                     match(input,SUM,FOLLOW_SUM_in_expr1407); 
                     pushFollow(FOLLOW_decls_in_expr1413);
@@ -2917,7 +2938,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 4 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1118:9: l= LET as= assigns BAR e= expr
+                    // src/Kodkodi.g:1141:9: l= LET as= assigns BAR e= expr
                     {
                     l=(Token)match(input,LET,FOLLOW_LET_in_expr1443); 
                     pushFollow(FOLLOW_assigns_in_expr1449);
@@ -2940,7 +2961,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 5 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1123:9: i= IF e= expr t= THEN e1= expr u= ELSE e2= expr
+                    // src/Kodkodi.g:1146:9: i= IF e= expr t= THEN e1= expr u= ELSE e2= expr
                     {
                     i=(Token)match(input,IF,FOLLOW_IF_in_expr1475); 
                     pushFollow(FOLLOW_expr_in_expr1481);
@@ -2988,7 +3009,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 6 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1147:9: e1= iff_formula (o= OR es= or_formula_tail[$o,\n new SingletonArrayList<Formula>(F($o, $node))] )?
+                    // src/Kodkodi.g:1170:9: e1= iff_formula (o= OR es= or_formula_tail[$o,\n new SingletonArrayList<Formula>(F($o, $node))] )?
                     {
                     pushFollow(FOLLOW_iff_formula_in_expr1523);
                     e1=iff_formula();
@@ -2996,7 +3017,7 @@ public class KodkodiParser extends Parser {
                     state._fsp--;
 
                      node = e1; 
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1148:9: (o= OR es= or_formula_tail[$o,\n new SingletonArrayList<Formula>(F($o, $node))] )?
+                    // src/Kodkodi.g:1171:9: (o= OR es= or_formula_tail[$o,\n new SingletonArrayList<Formula>(F($o, $node))] )?
                     int alt27=2;
                     int LA27_0 = input.LA(1);
 
@@ -3005,7 +3026,7 @@ public class KodkodiParser extends Parser {
                     }
                     switch (alt27) {
                         case 1 :
-                            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1148:10: o= OR es= or_formula_tail[$o,\n new SingletonArrayList<Formula>(F($o, $node))]
+                            // src/Kodkodi.g:1171:10: o= OR es= or_formula_tail[$o,\n new SingletonArrayList<Formula>(F($o, $node))]
                             {
                             o=(Token)match(input,OR,FOLLOW_OR_in_expr1540); 
                             pushFollow(FOLLOW_or_formula_tail_in_expr1546);
@@ -3038,7 +3059,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "or_formula_tail"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1151:1: or_formula_tail[Token token, List<Formula> formulas] returns [Object node] : e1= iff_formula ( OR es= or_formula_tail[$token, $formulas] | ) ;
+    // src/Kodkodi.g:1174:1: or_formula_tail[Token token, List<Formula> formulas] returns [Object node] : e1= iff_formula ( OR es= or_formula_tail[$token, $formulas] | ) ;
     public final Object or_formula_tail(Token token, List<Formula> formulas) throws RecognitionException {
         Object node = null;
 
@@ -3048,8 +3069,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1151:75: (e1= iff_formula ( OR es= or_formula_tail[$token, $formulas] | ) )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1152:9: e1= iff_formula ( OR es= or_formula_tail[$token, $formulas] | )
+            // src/Kodkodi.g:1174:75: (e1= iff_formula ( OR es= or_formula_tail[$token, $formulas] | ) )
+            // src/Kodkodi.g:1175:9: e1= iff_formula ( OR es= or_formula_tail[$token, $formulas] | )
             {
             pushFollow(FOLLOW_iff_formula_in_or_formula_tail1587);
             e1=iff_formula();
@@ -3057,7 +3078,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              formulas.add(F(token, e1)); 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1153:9: ( OR es= or_formula_tail[$token, $formulas] | )
+            // src/Kodkodi.g:1176:9: ( OR es= or_formula_tail[$token, $formulas] | )
             int alt29=2;
             int LA29_0 = input.LA(1);
 
@@ -3075,7 +3096,7 @@ public class KodkodiParser extends Parser {
             }
             switch (alt29) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1153:10: OR es= or_formula_tail[$token, $formulas]
+                    // src/Kodkodi.g:1176:10: OR es= or_formula_tail[$token, $formulas]
                     {
                     match(input,OR,FOLLOW_OR_in_or_formula_tail1600); 
                     pushFollow(FOLLOW_or_formula_tail_in_or_formula_tail1606);
@@ -3088,7 +3109,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 2 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1154:10: 
+                    // src/Kodkodi.g:1177:10: 
                     {
                      node = Formula.or(formulas); 
 
@@ -3113,7 +3134,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "iff_formula"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1155:1: iff_formula returns [Object node] : e1= implies_formula (i= IFF e2= implies_formula )* ;
+    // src/Kodkodi.g:1178:1: iff_formula returns [Object node] : e1= implies_formula (i= IFF e2= implies_formula )* ;
     public final Object iff_formula() throws RecognitionException {
         Object node = null;
 
@@ -3124,8 +3145,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1155:34: (e1= implies_formula (i= IFF e2= implies_formula )* )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1156:9: e1= implies_formula (i= IFF e2= implies_formula )*
+            // src/Kodkodi.g:1178:34: (e1= implies_formula (i= IFF e2= implies_formula )* )
+            // src/Kodkodi.g:1179:9: e1= implies_formula (i= IFF e2= implies_formula )*
             {
             pushFollow(FOLLOW_implies_formula_in_iff_formula1645);
             e1=implies_formula();
@@ -3133,7 +3154,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              node = e1; 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1157:9: (i= IFF e2= implies_formula )*
+            // src/Kodkodi.g:1180:9: (i= IFF e2= implies_formula )*
             loop30:
             do {
                 int alt30=2;
@@ -3146,7 +3167,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt30) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1157:10: i= IFF e2= implies_formula
+            	    // src/Kodkodi.g:1180:10: i= IFF e2= implies_formula
             	    {
             	    i=(Token)match(input,IFF,FOLLOW_IFF_in_iff_formula1662); 
             	    pushFollow(FOLLOW_implies_formula_in_iff_formula1668);
@@ -3182,7 +3203,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "implies_formula"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1160:1: implies_formula returns [Object node] : e1= and_formula (i= IMPLIES e2= implies_formula )? ;
+    // src/Kodkodi.g:1183:1: implies_formula returns [Object node] : e1= and_formula (i= IMPLIES e2= implies_formula )? ;
     public final Object implies_formula() throws RecognitionException {
         Object node = null;
 
@@ -3193,8 +3214,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1160:38: (e1= and_formula (i= IMPLIES e2= implies_formula )? )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1161:9: e1= and_formula (i= IMPLIES e2= implies_formula )?
+            // src/Kodkodi.g:1183:38: (e1= and_formula (i= IMPLIES e2= implies_formula )? )
+            // src/Kodkodi.g:1184:9: e1= and_formula (i= IMPLIES e2= implies_formula )?
             {
             pushFollow(FOLLOW_and_formula_in_implies_formula1694);
             e1=and_formula();
@@ -3202,7 +3223,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              node = e1; 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1162:9: (i= IMPLIES e2= implies_formula )?
+            // src/Kodkodi.g:1185:9: (i= IMPLIES e2= implies_formula )?
             int alt31=2;
             int LA31_0 = input.LA(1);
 
@@ -3211,7 +3232,7 @@ public class KodkodiParser extends Parser {
             }
             switch (alt31) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1162:10: i= IMPLIES e2= implies_formula
+                    // src/Kodkodi.g:1185:10: i= IMPLIES e2= implies_formula
                     {
                     i=(Token)match(input,IMPLIES,FOLLOW_IMPLIES_in_implies_formula1711); 
                     pushFollow(FOLLOW_implies_formula_in_implies_formula1717);
@@ -3244,7 +3265,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "and_formula"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1165:1: and_formula returns [Object node] : e1= basic_formula (a= AND es= and_formula_tail[$a,\n new SingletonArrayList<Formula>(F($a, $node))] )? ;
+    // src/Kodkodi.g:1188:1: and_formula returns [Object node] : e1= basic_formula (a= AND es= and_formula_tail[$a,\n new SingletonArrayList<Formula>(F($a, $node))] )? ;
     public final Object and_formula() throws RecognitionException {
         Object node = null;
 
@@ -3255,8 +3276,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1165:34: (e1= basic_formula (a= AND es= and_formula_tail[$a,\n new SingletonArrayList<Formula>(F($a, $node))] )? )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1166:9: e1= basic_formula (a= AND es= and_formula_tail[$a,\n new SingletonArrayList<Formula>(F($a, $node))] )?
+            // src/Kodkodi.g:1188:34: (e1= basic_formula (a= AND es= and_formula_tail[$a,\n new SingletonArrayList<Formula>(F($a, $node))] )? )
+            // src/Kodkodi.g:1189:9: e1= basic_formula (a= AND es= and_formula_tail[$a,\n new SingletonArrayList<Formula>(F($a, $node))] )?
             {
             pushFollow(FOLLOW_basic_formula_in_and_formula1743);
             e1=basic_formula();
@@ -3264,7 +3285,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              node = e1; 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1167:9: (a= AND es= and_formula_tail[$a,\n new SingletonArrayList<Formula>(F($a, $node))] )?
+            // src/Kodkodi.g:1190:9: (a= AND es= and_formula_tail[$a,\n new SingletonArrayList<Formula>(F($a, $node))] )?
             int alt32=2;
             int LA32_0 = input.LA(1);
 
@@ -3273,7 +3294,7 @@ public class KodkodiParser extends Parser {
             }
             switch (alt32) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1167:10: a= AND es= and_formula_tail[$a,\n new SingletonArrayList<Formula>(F($a, $node))]
+                    // src/Kodkodi.g:1190:10: a= AND es= and_formula_tail[$a,\n new SingletonArrayList<Formula>(F($a, $node))]
                     {
                     a=(Token)match(input,AND,FOLLOW_AND_in_and_formula1760); 
                     pushFollow(FOLLOW_and_formula_tail_in_and_formula1766);
@@ -3304,7 +3325,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "and_formula_tail"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1170:1: and_formula_tail[Token token, List<Formula> formulas] returns [Object node] : e1= basic_formula ( AND es= and_formula_tail[$token, $formulas] | ) ;
+    // src/Kodkodi.g:1193:1: and_formula_tail[Token token, List<Formula> formulas] returns [Object node] : e1= basic_formula ( AND es= and_formula_tail[$token, $formulas] | ) ;
     public final Object and_formula_tail(Token token, List<Formula> formulas) throws RecognitionException {
         Object node = null;
 
@@ -3314,8 +3335,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1170:76: (e1= basic_formula ( AND es= and_formula_tail[$token, $formulas] | ) )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1171:9: e1= basic_formula ( AND es= and_formula_tail[$token, $formulas] | )
+            // src/Kodkodi.g:1193:76: (e1= basic_formula ( AND es= and_formula_tail[$token, $formulas] | ) )
+            // src/Kodkodi.g:1194:9: e1= basic_formula ( AND es= and_formula_tail[$token, $formulas] | )
             {
             pushFollow(FOLLOW_basic_formula_in_and_formula_tail1807);
             e1=basic_formula();
@@ -3323,7 +3344,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              formulas.add(F(token, e1)); 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1172:9: ( AND es= and_formula_tail[$token, $formulas] | )
+            // src/Kodkodi.g:1195:9: ( AND es= and_formula_tail[$token, $formulas] | )
             int alt33=2;
             int LA33_0 = input.LA(1);
 
@@ -3341,7 +3362,7 @@ public class KodkodiParser extends Parser {
             }
             switch (alt33) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1172:10: AND es= and_formula_tail[$token, $formulas]
+                    // src/Kodkodi.g:1195:10: AND es= and_formula_tail[$token, $formulas]
                     {
                     match(input,AND,FOLLOW_AND_in_and_formula_tail1820); 
                     pushFollow(FOLLOW_and_formula_tail_in_and_formula_tail1826);
@@ -3354,7 +3375,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 2 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1173:10: 
+                    // src/Kodkodi.g:1196:10: 
                     {
                      node = Formula.and(formulas); 
 
@@ -3379,7 +3400,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "basic_formula"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1174:1: basic_formula returns [Object node] : (t= NOT e1= basic_formula | e1= predicate_formula | e1= shift_expr (t= ( EQ | LT | LE | GT | GE | IN ) e2= shift_expr | ) | m= multiplicity e1= add_expr );
+    // src/Kodkodi.g:1197:1: basic_formula returns [Object node] : (t= NOT e1= basic_formula | e1= predicate_formula | e1= shift_expr (t= ( EQ | LT | LE | GT | GE | IN ) e2= shift_expr | ) | m= multiplicity e1= add_expr );
     public final Object basic_formula() throws RecognitionException {
         Object node = null;
 
@@ -3392,7 +3413,7 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1174:36: (t= NOT e1= basic_formula | e1= predicate_formula | e1= shift_expr (t= ( EQ | LT | LE | GT | GE | IN ) e2= shift_expr | ) | m= multiplicity e1= add_expr )
+            // src/Kodkodi.g:1197:36: (t= NOT e1= basic_formula | e1= predicate_formula | e1= shift_expr (t= ( EQ | LT | LE | GT | GE | IN ) e2= shift_expr | ) | m= multiplicity e1= add_expr )
             int alt35=4;
             switch ( input.LA(1) ) {
             case NOT:
@@ -3456,7 +3477,7 @@ public class KodkodiParser extends Parser {
 
             switch (alt35) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1175:9: t= NOT e1= basic_formula
+                    // src/Kodkodi.g:1198:9: t= NOT e1= basic_formula
                     {
                     t=(Token)match(input,NOT,FOLLOW_NOT_in_basic_formula1865); 
                     pushFollow(FOLLOW_basic_formula_in_basic_formula1871);
@@ -3469,7 +3490,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 2 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1176:9: e1= predicate_formula
+                    // src/Kodkodi.g:1199:9: e1= predicate_formula
                     {
                     pushFollow(FOLLOW_predicate_formula_in_basic_formula1889);
                     e1=predicate_formula();
@@ -3481,14 +3502,14 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 3 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1177:9: e1= shift_expr (t= ( EQ | LT | LE | GT | GE | IN ) e2= shift_expr | )
+                    // src/Kodkodi.g:1200:9: e1= shift_expr (t= ( EQ | LT | LE | GT | GE | IN ) e2= shift_expr | )
                     {
                     pushFollow(FOLLOW_shift_expr_in_basic_formula1907);
                     e1=shift_expr();
 
                     state._fsp--;
 
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1178:9: (t= ( EQ | LT | LE | GT | GE | IN ) e2= shift_expr | )
+                    // src/Kodkodi.g:1201:9: (t= ( EQ | LT | LE | GT | GE | IN ) e2= shift_expr | )
                     int alt34=2;
                     int LA34_0 = input.LA(1);
 
@@ -3506,7 +3527,7 @@ public class KodkodiParser extends Parser {
                     }
                     switch (alt34) {
                         case 1 :
-                            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1178:10: t= ( EQ | LT | LE | GT | GE | IN ) e2= shift_expr
+                            // src/Kodkodi.g:1201:10: t= ( EQ | LT | LE | GT | GE | IN ) e2= shift_expr
                             {
                             t=(Token)input.LT(1);
                             if ( (input.LA(1)>=EQ && input.LA(1)<=IN) ) {
@@ -3571,7 +3592,7 @@ public class KodkodiParser extends Parser {
                             }
                             break;
                         case 2 :
-                            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1221:14: 
+                            // src/Kodkodi.g:1244:14: 
                             {
 
                                          node = e1;
@@ -3586,7 +3607,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 4 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1224:9: m= multiplicity e1= add_expr
+                    // src/Kodkodi.g:1247:9: m= multiplicity e1= add_expr
                     {
                     pushFollow(FOLLOW_multiplicity_in_basic_formula1973);
                     m=multiplicity();
@@ -3623,7 +3644,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "predicate_formula"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1231:1: predicate_formula returns [Object node] : (a= ACYCLIC PAREN_LEFT n= RELATION_NAME PAREN_RIGHT | f= FUNCTION PAREN_LEFT n= RELATION_NAME c= COMMA e1= expr ARROW t= ( ONE | LONE ) e2= expr PAREN_RIGHT | t= TOTAL_ORDERING PAREN_LEFT n1= RELATION_NAME COMMA n2= ( UNIV_NAME | OFFSET_UNIV_NAME | RELATION_NAME ) COMMA n3= ( ATOM_NAME | RELATION_NAME ) COMMA n4= ( ATOM_NAME | RELATION_NAME ) PAREN_RIGHT );
+    // src/Kodkodi.g:1254:1: predicate_formula returns [Object node] : (a= ACYCLIC PAREN_LEFT n= RELATION_NAME PAREN_RIGHT | f= FUNCTION PAREN_LEFT n= RELATION_NAME c= COMMA e1= expr ARROW t= ( ONE | LONE ) e2= expr PAREN_RIGHT | t= TOTAL_ORDERING PAREN_LEFT n1= RELATION_NAME COMMA n2= ( UNIV_NAME | OFFSET_UNIV_NAME | RELATION_NAME ) COMMA n3= ( ATOM_NAME | RELATION_NAME ) COMMA n4= ( ATOM_NAME | RELATION_NAME ) PAREN_RIGHT );
     public final Object predicate_formula() throws RecognitionException {
         Object node = null;
 
@@ -3642,7 +3663,7 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1231:40: (a= ACYCLIC PAREN_LEFT n= RELATION_NAME PAREN_RIGHT | f= FUNCTION PAREN_LEFT n= RELATION_NAME c= COMMA e1= expr ARROW t= ( ONE | LONE ) e2= expr PAREN_RIGHT | t= TOTAL_ORDERING PAREN_LEFT n1= RELATION_NAME COMMA n2= ( UNIV_NAME | OFFSET_UNIV_NAME | RELATION_NAME ) COMMA n3= ( ATOM_NAME | RELATION_NAME ) COMMA n4= ( ATOM_NAME | RELATION_NAME ) PAREN_RIGHT )
+            // src/Kodkodi.g:1254:40: (a= ACYCLIC PAREN_LEFT n= RELATION_NAME PAREN_RIGHT | f= FUNCTION PAREN_LEFT n= RELATION_NAME c= COMMA e1= expr ARROW t= ( ONE | LONE ) e2= expr PAREN_RIGHT | t= TOTAL_ORDERING PAREN_LEFT n1= RELATION_NAME COMMA n2= ( UNIV_NAME | OFFSET_UNIV_NAME | RELATION_NAME ) COMMA n3= ( ATOM_NAME | RELATION_NAME ) COMMA n4= ( ATOM_NAME | RELATION_NAME ) PAREN_RIGHT )
             int alt36=3;
             switch ( input.LA(1) ) {
             case ACYCLIC:
@@ -3669,7 +3690,7 @@ public class KodkodiParser extends Parser {
 
             switch (alt36) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1232:9: a= ACYCLIC PAREN_LEFT n= RELATION_NAME PAREN_RIGHT
+                    // src/Kodkodi.g:1255:9: a= ACYCLIC PAREN_LEFT n= RELATION_NAME PAREN_RIGHT
                     {
                     a=(Token)match(input,ACYCLIC,FOLLOW_ACYCLIC_in_predicate_formula2003); 
                     match(input,PAREN_LEFT,FOLLOW_PAREN_LEFT_in_predicate_formula2005); 
@@ -3686,7 +3707,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 2 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1239:9: f= FUNCTION PAREN_LEFT n= RELATION_NAME c= COMMA e1= expr ARROW t= ( ONE | LONE ) e2= expr PAREN_RIGHT
+                    // src/Kodkodi.g:1262:9: f= FUNCTION PAREN_LEFT n= RELATION_NAME c= COMMA e1= expr ARROW t= ( ONE | LONE ) e2= expr PAREN_RIGHT
                     {
                     f=(Token)match(input,FUNCTION,FOLLOW_FUNCTION_in_predicate_formula2031); 
                     match(input,PAREN_LEFT,FOLLOW_PAREN_LEFT_in_predicate_formula2033); 
@@ -3730,7 +3751,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 3 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1252:9: t= TOTAL_ORDERING PAREN_LEFT n1= RELATION_NAME COMMA n2= ( UNIV_NAME | OFFSET_UNIV_NAME | RELATION_NAME ) COMMA n3= ( ATOM_NAME | RELATION_NAME ) COMMA n4= ( ATOM_NAME | RELATION_NAME ) PAREN_RIGHT
+                    // src/Kodkodi.g:1275:9: t= TOTAL_ORDERING PAREN_LEFT n1= RELATION_NAME COMMA n2= ( UNIV_NAME | OFFSET_UNIV_NAME | RELATION_NAME ) COMMA n3= ( ATOM_NAME | RELATION_NAME ) COMMA n4= ( ATOM_NAME | RELATION_NAME ) PAREN_RIGHT
                     {
                     t=(Token)match(input,TOTAL_ORDERING,FOLLOW_TOTAL_ORDERING_in_predicate_formula2099); 
                     match(input,PAREN_LEFT,FOLLOW_PAREN_LEFT_in_predicate_formula2101); 
@@ -3796,7 +3817,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "shift_expr"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1264:1: shift_expr returns [Object node] : e1= add_expr (t= ( SHL | SHA | SHR ) e2= add_expr )* ;
+    // src/Kodkodi.g:1287:1: shift_expr returns [Object node] : e1= add_expr (t= ( SHL | SHA | SHR ) e2= add_expr )* ;
     public final Object shift_expr() throws RecognitionException {
         Object node = null;
 
@@ -3807,8 +3828,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1264:33: (e1= add_expr (t= ( SHL | SHA | SHR ) e2= add_expr )* )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1265:9: e1= add_expr (t= ( SHL | SHA | SHR ) e2= add_expr )*
+            // src/Kodkodi.g:1287:33: (e1= add_expr (t= ( SHL | SHA | SHR ) e2= add_expr )* )
+            // src/Kodkodi.g:1288:9: e1= add_expr (t= ( SHL | SHA | SHR ) e2= add_expr )*
             {
             pushFollow(FOLLOW_add_expr_in_shift_expr2203);
             e1=add_expr();
@@ -3816,7 +3837,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              node = e1; 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1266:9: (t= ( SHL | SHA | SHR ) e2= add_expr )*
+            // src/Kodkodi.g:1289:9: (t= ( SHL | SHA | SHR ) e2= add_expr )*
             loop37:
             do {
                 int alt37=2;
@@ -3829,7 +3850,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt37) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1266:10: t= ( SHL | SHA | SHR ) e2= add_expr
+            	    // src/Kodkodi.g:1289:10: t= ( SHL | SHA | SHR ) e2= add_expr
             	    {
             	    t=(Token)input.LT(1);
             	    if ( (input.LA(1)>=SHL && input.LA(1)<=SHR) ) {
@@ -3880,7 +3901,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "add_expr"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1275:1: add_expr returns [Object node] : e1= mult_expr (t= ( PLUS | MINUS ) e2= mult_expr )* ;
+    // src/Kodkodi.g:1298:1: add_expr returns [Object node] : e1= mult_expr (t= ( PLUS | MINUS ) e2= mult_expr )* ;
     public final Object add_expr() throws RecognitionException {
         Object node = null;
 
@@ -3891,8 +3912,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1275:31: (e1= mult_expr (t= ( PLUS | MINUS ) e2= mult_expr )* )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1276:9: e1= mult_expr (t= ( PLUS | MINUS ) e2= mult_expr )*
+            // src/Kodkodi.g:1298:31: (e1= mult_expr (t= ( PLUS | MINUS ) e2= mult_expr )* )
+            // src/Kodkodi.g:1299:9: e1= mult_expr (t= ( PLUS | MINUS ) e2= mult_expr )*
             {
             pushFollow(FOLLOW_mult_expr_in_add_expr2262);
             e1=mult_expr();
@@ -3900,7 +3921,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              node = e1; 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1277:9: (t= ( PLUS | MINUS ) e2= mult_expr )*
+            // src/Kodkodi.g:1300:9: (t= ( PLUS | MINUS ) e2= mult_expr )*
             loop38:
             do {
                 int alt38=2;
@@ -3913,7 +3934,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt38) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1277:10: t= ( PLUS | MINUS ) e2= mult_expr
+            	    // src/Kodkodi.g:1300:10: t= ( PLUS | MINUS ) e2= mult_expr
             	    {
             	    t=(Token)input.LT(1);
             	    if ( (input.LA(1)>=PLUS && input.LA(1)<=MINUS) ) {
@@ -3983,7 +4004,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "mult_expr"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1305:1: mult_expr returns [Object node] : e1= expr_to_int_cast (t= ( STAR | DIVIDE | MODULO ) e2= expr_to_int_cast )* ;
+    // src/Kodkodi.g:1328:1: mult_expr returns [Object node] : e1= expr_to_int_cast (t= ( STAR | DIVIDE | MODULO ) e2= expr_to_int_cast )* ;
     public final Object mult_expr() throws RecognitionException {
         Object node = null;
 
@@ -3994,8 +4015,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1305:32: (e1= expr_to_int_cast (t= ( STAR | DIVIDE | MODULO ) e2= expr_to_int_cast )* )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1306:9: e1= expr_to_int_cast (t= ( STAR | DIVIDE | MODULO ) e2= expr_to_int_cast )*
+            // src/Kodkodi.g:1328:32: (e1= expr_to_int_cast (t= ( STAR | DIVIDE | MODULO ) e2= expr_to_int_cast )* )
+            // src/Kodkodi.g:1329:9: e1= expr_to_int_cast (t= ( STAR | DIVIDE | MODULO ) e2= expr_to_int_cast )*
             {
             pushFollow(FOLLOW_expr_to_int_cast_in_mult_expr2317);
             e1=expr_to_int_cast();
@@ -4003,7 +4024,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              node = e1; 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1307:9: (t= ( STAR | DIVIDE | MODULO ) e2= expr_to_int_cast )*
+            // src/Kodkodi.g:1330:9: (t= ( STAR | DIVIDE | MODULO ) e2= expr_to_int_cast )*
             loop39:
             do {
                 int alt39=2;
@@ -4016,7 +4037,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt39) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1307:10: t= ( STAR | DIVIDE | MODULO ) e2= expr_to_int_cast
+            	    // src/Kodkodi.g:1330:10: t= ( STAR | DIVIDE | MODULO ) e2= expr_to_int_cast
             	    {
             	    t=(Token)input.LT(1);
             	    if ( (input.LA(1)>=STAR && input.LA(1)<=MODULO) ) {
@@ -4067,7 +4088,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "expr_to_int_cast"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1316:1: expr_to_int_cast returns [Object node] : (t= ( HASH | SUM ) PAREN_LEFT e= expr PAREN_RIGHT | e1= product_expr (o= ( BAR | HAT | AMP ) e2= product_expr )* (o= OVERRIDE e2= expr_to_int_cast )? );
+    // src/Kodkodi.g:1339:1: expr_to_int_cast returns [Object node] : (t= ( HASH | SUM ) PAREN_LEFT e= expr PAREN_RIGHT | e1= product_expr (o= ( BAR | HAT | AMP ) e2= product_expr )* (o= OVERRIDE e2= expr_to_int_cast )? );
     public final Object expr_to_int_cast() throws RecognitionException {
         Object node = null;
 
@@ -4081,7 +4102,7 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1316:39: (t= ( HASH | SUM ) PAREN_LEFT e= expr PAREN_RIGHT | e1= product_expr (o= ( BAR | HAT | AMP ) e2= product_expr )* (o= OVERRIDE e2= expr_to_int_cast )? )
+            // src/Kodkodi.g:1339:39: (t= ( HASH | SUM ) PAREN_LEFT e= expr PAREN_RIGHT | e1= product_expr (o= ( BAR | HAT | AMP ) e2= product_expr )* (o= OVERRIDE e2= expr_to_int_cast )? )
             int alt42=2;
             int LA42_0 = input.LA(1);
 
@@ -4099,7 +4120,7 @@ public class KodkodiParser extends Parser {
             }
             switch (alt42) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1317:9: t= ( HASH | SUM ) PAREN_LEFT e= expr PAREN_RIGHT
+                    // src/Kodkodi.g:1340:9: t= ( HASH | SUM ) PAREN_LEFT e= expr PAREN_RIGHT
                     {
                     t=(Token)input.LT(1);
                     if ( input.LA(1)==HASH||input.LA(1)==SUM ) {
@@ -4131,7 +4152,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 2 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1326:9: e1= product_expr (o= ( BAR | HAT | AMP ) e2= product_expr )* (o= OVERRIDE e2= expr_to_int_cast )?
+                    // src/Kodkodi.g:1349:9: e1= product_expr (o= ( BAR | HAT | AMP ) e2= product_expr )* (o= OVERRIDE e2= expr_to_int_cast )?
                     {
                     pushFollow(FOLLOW_product_expr_in_expr_to_int_cast2410);
                     e1=product_expr();
@@ -4139,7 +4160,7 @@ public class KodkodiParser extends Parser {
                     state._fsp--;
 
                      node = e1; 
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1327:9: (o= ( BAR | HAT | AMP ) e2= product_expr )*
+                    // src/Kodkodi.g:1350:9: (o= ( BAR | HAT | AMP ) e2= product_expr )*
                     loop40:
                     do {
                         int alt40=2;
@@ -4152,7 +4173,7 @@ public class KodkodiParser extends Parser {
 
                         switch (alt40) {
                     	case 1 :
-                    	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1327:10: o= ( BAR | HAT | AMP ) e2= product_expr
+                    	    // src/Kodkodi.g:1350:10: o= ( BAR | HAT | AMP ) e2= product_expr
                     	    {
                     	    o=(Token)input.LT(1);
                     	    if ( input.LA(1)==BAR||(input.LA(1)>=HAT && input.LA(1)<=AMP) ) {
@@ -4204,7 +4225,7 @@ public class KodkodiParser extends Parser {
                         }
                     } while (true);
 
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1352:13: (o= OVERRIDE e2= expr_to_int_cast )?
+                    // src/Kodkodi.g:1375:13: (o= OVERRIDE e2= expr_to_int_cast )?
                     int alt41=2;
                     int LA41_0 = input.LA(1);
 
@@ -4213,7 +4234,7 @@ public class KodkodiParser extends Parser {
                     }
                     switch (alt41) {
                         case 1 :
-                            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1352:14: o= OVERRIDE e2= expr_to_int_cast
+                            // src/Kodkodi.g:1375:14: o= OVERRIDE e2= expr_to_int_cast
                             {
                             o=(Token)match(input,OVERRIDE,FOLLOW_OVERRIDE_in_expr_to_int_cast2454); 
                             pushFollow(FOLLOW_expr_to_int_cast_in_expr_to_int_cast2460);
@@ -4259,7 +4280,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "product_expr"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1366:1: product_expr returns [Object node] : e1= ifno_expr (a= ARROW es= product_expr_tail[$a,\n new SingletonArrayList<Expression>(E($a, $node))] )? ;
+    // src/Kodkodi.g:1389:1: product_expr returns [Object node] : e1= ifno_expr (a= ARROW es= product_expr_tail[$a,\n new SingletonArrayList<Expression>(E($a, $node))] )? ;
     public final Object product_expr() throws RecognitionException {
         Object node = null;
 
@@ -4270,8 +4291,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1366:35: (e1= ifno_expr (a= ARROW es= product_expr_tail[$a,\n new SingletonArrayList<Expression>(E($a, $node))] )? )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1367:9: e1= ifno_expr (a= ARROW es= product_expr_tail[$a,\n new SingletonArrayList<Expression>(E($a, $node))] )?
+            // src/Kodkodi.g:1389:35: (e1= ifno_expr (a= ARROW es= product_expr_tail[$a,\n new SingletonArrayList<Expression>(E($a, $node))] )? )
+            // src/Kodkodi.g:1390:9: e1= ifno_expr (a= ARROW es= product_expr_tail[$a,\n new SingletonArrayList<Expression>(E($a, $node))] )?
             {
             pushFollow(FOLLOW_ifno_expr_in_product_expr2486);
             e1=ifno_expr();
@@ -4279,7 +4300,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              node = e1; 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1368:9: (a= ARROW es= product_expr_tail[$a,\n new SingletonArrayList<Expression>(E($a, $node))] )?
+            // src/Kodkodi.g:1391:9: (a= ARROW es= product_expr_tail[$a,\n new SingletonArrayList<Expression>(E($a, $node))] )?
             int alt43=2;
             int LA43_0 = input.LA(1);
 
@@ -4292,7 +4313,7 @@ public class KodkodiParser extends Parser {
             }
             switch (alt43) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1368:10: a= ARROW es= product_expr_tail[$a,\n new SingletonArrayList<Expression>(E($a, $node))]
+                    // src/Kodkodi.g:1391:10: a= ARROW es= product_expr_tail[$a,\n new SingletonArrayList<Expression>(E($a, $node))]
                     {
                     a=(Token)match(input,ARROW,FOLLOW_ARROW_in_product_expr2503); 
                     pushFollow(FOLLOW_product_expr_tail_in_product_expr2509);
@@ -4323,7 +4344,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "product_expr_tail"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1371:1: product_expr_tail[Token token, List<Expression> exprs] returns [Object node] : e1= ifno_expr ( ARROW es= product_expr_tail[$token, $exprs] | ) ;
+    // src/Kodkodi.g:1394:1: product_expr_tail[Token token, List<Expression> exprs] returns [Object node] : e1= ifno_expr ( ARROW es= product_expr_tail[$token, $exprs] | ) ;
     public final Object product_expr_tail(Token token, List<Expression> exprs) throws RecognitionException {
         Object node = null;
 
@@ -4333,8 +4354,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1371:77: (e1= ifno_expr ( ARROW es= product_expr_tail[$token, $exprs] | ) )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1372:9: e1= ifno_expr ( ARROW es= product_expr_tail[$token, $exprs] | )
+            // src/Kodkodi.g:1394:77: (e1= ifno_expr ( ARROW es= product_expr_tail[$token, $exprs] | ) )
+            // src/Kodkodi.g:1395:9: e1= ifno_expr ( ARROW es= product_expr_tail[$token, $exprs] | )
             {
             pushFollow(FOLLOW_ifno_expr_in_product_expr_tail2550);
             e1=ifno_expr();
@@ -4342,7 +4363,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              exprs.add(E(token, e1)); 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1373:9: ( ARROW es= product_expr_tail[$token, $exprs] | )
+            // src/Kodkodi.g:1396:9: ( ARROW es= product_expr_tail[$token, $exprs] | )
             int alt44=2;
             int LA44_0 = input.LA(1);
 
@@ -4373,7 +4394,7 @@ public class KodkodiParser extends Parser {
             }
             switch (alt44) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1373:10: ARROW es= product_expr_tail[$token, $exprs]
+                    // src/Kodkodi.g:1396:10: ARROW es= product_expr_tail[$token, $exprs]
                     {
                     match(input,ARROW,FOLLOW_ARROW_in_product_expr_tail2563); 
                     pushFollow(FOLLOW_product_expr_tail_in_product_expr_tail2569);
@@ -4386,7 +4407,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 2 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1374:10: 
+                    // src/Kodkodi.g:1397:10: 
                     {
                      node = Expression.product(exprs); 
 
@@ -4411,7 +4432,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "ifno_expr"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1375:1: ifno_expr returns [Object node] : e1= apply_expr (a= IFNO e2= apply_expr )* ;
+    // src/Kodkodi.g:1398:1: ifno_expr returns [Object node] : e1= apply_expr (a= IFNO e2= apply_expr )* ;
     public final Object ifno_expr() throws RecognitionException {
         Object node = null;
 
@@ -4422,8 +4443,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1375:32: (e1= apply_expr (a= IFNO e2= apply_expr )* )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1376:9: e1= apply_expr (a= IFNO e2= apply_expr )*
+            // src/Kodkodi.g:1398:32: (e1= apply_expr (a= IFNO e2= apply_expr )* )
+            // src/Kodkodi.g:1399:9: e1= apply_expr (a= IFNO e2= apply_expr )*
             {
             pushFollow(FOLLOW_apply_expr_in_ifno_expr2608);
             e1=apply_expr();
@@ -4431,7 +4452,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              node = e1; 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1377:9: (a= IFNO e2= apply_expr )*
+            // src/Kodkodi.g:1400:9: (a= IFNO e2= apply_expr )*
             loop45:
             do {
                 int alt45=2;
@@ -4444,7 +4465,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt45) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1377:10: a= IFNO e2= apply_expr
+            	    // src/Kodkodi.g:1400:10: a= IFNO e2= apply_expr
             	    {
             	    a=(Token)match(input,IFNO,FOLLOW_IFNO_in_ifno_expr2625); 
             	    pushFollow(FOLLOW_apply_expr_in_ifno_expr2631);
@@ -4480,7 +4501,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "apply_expr"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1380:1: apply_expr returns [Object node] : e1= project_expr (p= PAREN_LEFT e2= expr ( COMMA e3= expr )* PAREN_RIGHT )* ;
+    // src/Kodkodi.g:1403:1: apply_expr returns [Object node] : e1= project_expr (p= PAREN_LEFT e2= expr ( COMMA e3= expr )* PAREN_RIGHT )* ;
     public final Object apply_expr() throws RecognitionException {
         Object node = null;
 
@@ -4493,8 +4514,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1380:33: (e1= project_expr (p= PAREN_LEFT e2= expr ( COMMA e3= expr )* PAREN_RIGHT )* )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1381:9: e1= project_expr (p= PAREN_LEFT e2= expr ( COMMA e3= expr )* PAREN_RIGHT )*
+            // src/Kodkodi.g:1403:33: (e1= project_expr (p= PAREN_LEFT e2= expr ( COMMA e3= expr )* PAREN_RIGHT )* )
+            // src/Kodkodi.g:1404:9: e1= project_expr (p= PAREN_LEFT e2= expr ( COMMA e3= expr )* PAREN_RIGHT )*
             {
             pushFollow(FOLLOW_project_expr_in_apply_expr2657);
             e1=project_expr();
@@ -4502,7 +4523,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              node = e1; 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1382:9: (p= PAREN_LEFT e2= expr ( COMMA e3= expr )* PAREN_RIGHT )*
+            // src/Kodkodi.g:1405:9: (p= PAREN_LEFT e2= expr ( COMMA e3= expr )* PAREN_RIGHT )*
             loop47:
             do {
                 int alt47=2;
@@ -4515,7 +4536,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt47) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1382:10: p= PAREN_LEFT e2= expr ( COMMA e3= expr )* PAREN_RIGHT
+            	    // src/Kodkodi.g:1405:10: p= PAREN_LEFT e2= expr ( COMMA e3= expr )* PAREN_RIGHT
             	    {
             	    p=(Token)match(input,PAREN_LEFT,FOLLOW_PAREN_LEFT_in_apply_expr2674); 
             	    pushFollow(FOLLOW_expr_in_apply_expr2680);
@@ -4536,7 +4557,7 @@ public class KodkodiParser extends Parser {
             	                     }
             	                 }
             	             
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1394:12: ( COMMA e3= expr )*
+            	    // src/Kodkodi.g:1417:12: ( COMMA e3= expr )*
             	    loop46:
             	    do {
             	        int alt46=2;
@@ -4549,7 +4570,7 @@ public class KodkodiParser extends Parser {
 
             	        switch (alt46) {
             	    	case 1 :
-            	    	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1394:13: COMMA e3= expr
+            	    	    // src/Kodkodi.g:1417:13: COMMA e3= expr
             	    	    {
             	    	    match(input,COMMA,FOLLOW_COMMA_in_apply_expr2685); 
             	    	    pushFollow(FOLLOW_expr_in_apply_expr2691);
@@ -4605,7 +4626,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "project_expr"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1407:1: project_expr returns [Object node] : e1= basic_expr (d= DOT e2= basic_expr )* (cs= project_columns )* ;
+    // src/Kodkodi.g:1430:1: project_expr returns [Object node] : e1= basic_expr (d= DOT e2= basic_expr )* (cs= project_columns )* ;
     public final Object project_expr() throws RecognitionException {
         Object node = null;
 
@@ -4618,8 +4639,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1407:35: (e1= basic_expr (d= DOT e2= basic_expr )* (cs= project_columns )* )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1408:9: e1= basic_expr (d= DOT e2= basic_expr )* (cs= project_columns )*
+            // src/Kodkodi.g:1430:35: (e1= basic_expr (d= DOT e2= basic_expr )* (cs= project_columns )* )
+            // src/Kodkodi.g:1431:9: e1= basic_expr (d= DOT e2= basic_expr )* (cs= project_columns )*
             {
             pushFollow(FOLLOW_basic_expr_in_project_expr2721);
             e1=basic_expr();
@@ -4627,7 +4648,7 @@ public class KodkodiParser extends Parser {
             state._fsp--;
 
              node = e1; 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1409:9: (d= DOT e2= basic_expr )*
+            // src/Kodkodi.g:1432:9: (d= DOT e2= basic_expr )*
             loop48:
             do {
                 int alt48=2;
@@ -4640,7 +4661,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt48) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1409:10: d= DOT e2= basic_expr
+            	    // src/Kodkodi.g:1432:10: d= DOT e2= basic_expr
             	    {
             	    d=(Token)match(input,DOT,FOLLOW_DOT_in_project_expr2738); 
             	    pushFollow(FOLLOW_basic_expr_in_project_expr2744);
@@ -4670,7 +4691,7 @@ public class KodkodiParser extends Parser {
                 }
             } while (true);
 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1421:14: (cs= project_columns )*
+            // src/Kodkodi.g:1444:14: (cs= project_columns )*
             loop49:
             do {
                 int alt49=2;
@@ -4683,7 +4704,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt49) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1421:15: cs= project_columns
+            	    // src/Kodkodi.g:1444:15: cs= project_columns
             	    {
             	    pushFollow(FOLLOW_project_columns_in_project_expr2755);
             	    cs=project_columns();
@@ -4720,7 +4741,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "basic_expr"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1426:1: basic_expr returns [Object node] : ( PAREN_LEFT e= expr PAREN_RIGHT | n= ( ATOM_NAME | UNIV_NAME | OFFSET_UNIV_NAME | RELATION_NAME ) | n= VARIABLE_NAME | r= FORMULA_REG | r= REL_EXPR_REG | r= INT_EXPR_REG | n= NUM | FALSE | TRUE | IDEN | INTS | NONE | UNIV | t= ( HAT | STAR | TILDE | ABS | SGN | MINUS ) e= basic_expr | BRACE_LEFT ds= decls t= BAR e= expr BRACE_RIGHT | t= ( BITS | INT ) BRACKET_LEFT e= expr BRACKET_RIGHT );
+    // src/Kodkodi.g:1449:1: basic_expr returns [Object node] : ( PAREN_LEFT e= expr PAREN_RIGHT | n= ( ATOM_NAME | UNIV_NAME | OFFSET_UNIV_NAME | RELATION_NAME ) | n= VARIABLE_NAME | r= FORMULA_REG | r= REL_EXPR_REG | r= INT_EXPR_REG | n= NUM | FALSE | TRUE | IDEN | INTS | NONE | UNIV | t= ( HAT | STAR | TILDE | ABS | SGN | MINUS ) e= basic_expr | BRACE_LEFT ds= decls t= BAR e= expr BRACE_RIGHT | t= ( BITS | INT ) BRACKET_LEFT e= expr BRACKET_RIGHT );
     public final Object basic_expr() throws RecognitionException {
         Object node = null;
 
@@ -4733,7 +4754,7 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1426:33: ( PAREN_LEFT e= expr PAREN_RIGHT | n= ( ATOM_NAME | UNIV_NAME | OFFSET_UNIV_NAME | RELATION_NAME ) | n= VARIABLE_NAME | r= FORMULA_REG | r= REL_EXPR_REG | r= INT_EXPR_REG | n= NUM | FALSE | TRUE | IDEN | INTS | NONE | UNIV | t= ( HAT | STAR | TILDE | ABS | SGN | MINUS ) e= basic_expr | BRACE_LEFT ds= decls t= BAR e= expr BRACE_RIGHT | t= ( BITS | INT ) BRACKET_LEFT e= expr BRACKET_RIGHT )
+            // src/Kodkodi.g:1449:33: ( PAREN_LEFT e= expr PAREN_RIGHT | n= ( ATOM_NAME | UNIV_NAME | OFFSET_UNIV_NAME | RELATION_NAME ) | n= VARIABLE_NAME | r= FORMULA_REG | r= REL_EXPR_REG | r= INT_EXPR_REG | n= NUM | FALSE | TRUE | IDEN | INTS | NONE | UNIV | t= ( HAT | STAR | TILDE | ABS | SGN | MINUS ) e= basic_expr | BRACE_LEFT ds= decls t= BAR e= expr BRACE_RIGHT | t= ( BITS | INT ) BRACKET_LEFT e= expr BRACKET_RIGHT )
             int alt50=16;
             switch ( input.LA(1) ) {
             case PAREN_LEFT:
@@ -4834,7 +4855,7 @@ public class KodkodiParser extends Parser {
 
             switch (alt50) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1427:9: PAREN_LEFT e= expr PAREN_RIGHT
+                    // src/Kodkodi.g:1450:9: PAREN_LEFT e= expr PAREN_RIGHT
                     {
                     match(input,PAREN_LEFT,FOLLOW_PAREN_LEFT_in_basic_expr2777); 
                     pushFollow(FOLLOW_expr_in_basic_expr2783);
@@ -4848,7 +4869,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 2 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1428:9: n= ( ATOM_NAME | UNIV_NAME | OFFSET_UNIV_NAME | RELATION_NAME )
+                    // src/Kodkodi.g:1451:9: n= ( ATOM_NAME | UNIV_NAME | OFFSET_UNIV_NAME | RELATION_NAME )
                     {
                     n=(Token)input.LT(1);
                     if ( input.LA(1)==UNIV_NAME||input.LA(1)==RELATION_NAME||input.LA(1)==OFFSET_UNIV_NAME||input.LA(1)==ATOM_NAME ) {
@@ -4865,7 +4886,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 3 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1430:9: n= VARIABLE_NAME
+                    // src/Kodkodi.g:1453:9: n= VARIABLE_NAME
                     {
                     n=(Token)match(input,VARIABLE_NAME,FOLLOW_VARIABLE_NAME_in_basic_expr2847); 
                      node = getVariable(n); 
@@ -4873,7 +4894,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 4 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1431:9: r= FORMULA_REG
+                    // src/Kodkodi.g:1454:9: r= FORMULA_REG
                     {
                     r=(Token)match(input,FORMULA_REG,FOLLOW_FORMULA_REG_in_basic_expr2865); 
                      node = getFormulaReg(r); 
@@ -4881,7 +4902,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 5 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1432:9: r= REL_EXPR_REG
+                    // src/Kodkodi.g:1455:9: r= REL_EXPR_REG
                     {
                     r=(Token)match(input,REL_EXPR_REG,FOLLOW_REL_EXPR_REG_in_basic_expr2883); 
                      node = getExprReg(r); 
@@ -4889,7 +4910,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 6 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1433:9: r= INT_EXPR_REG
+                    // src/Kodkodi.g:1456:9: r= INT_EXPR_REG
                     {
                     r=(Token)match(input,INT_EXPR_REG,FOLLOW_INT_EXPR_REG_in_basic_expr2901); 
                      node = getIntExprReg(r); 
@@ -4897,7 +4918,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 7 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1434:9: n= NUM
+                    // src/Kodkodi.g:1457:9: n= NUM
                     {
                     n=(Token)match(input,NUM,FOLLOW_NUM_in_basic_expr2919); 
                      node = getIntConstant(n); 
@@ -4905,7 +4926,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 8 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1435:9: FALSE
+                    // src/Kodkodi.g:1458:9: FALSE
                     {
                     match(input,FALSE,FOLLOW_FALSE_in_basic_expr2933); 
                      node = Formula.FALSE; 
@@ -4913,7 +4934,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 9 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1436:9: TRUE
+                    // src/Kodkodi.g:1459:9: TRUE
                     {
                     match(input,TRUE,FOLLOW_TRUE_in_basic_expr2947); 
                      node = Formula.TRUE; 
@@ -4921,7 +4942,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 10 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1437:9: IDEN
+                    // src/Kodkodi.g:1460:9: IDEN
                     {
                     match(input,IDEN,FOLLOW_IDEN_in_basic_expr2961); 
                      node = Expression.IDEN; 
@@ -4929,7 +4950,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 11 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1438:9: INTS
+                    // src/Kodkodi.g:1461:9: INTS
                     {
                     match(input,INTS,FOLLOW_INTS_in_basic_expr2975); 
                      node = Expression.INTS; 
@@ -4937,7 +4958,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 12 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1439:9: NONE
+                    // src/Kodkodi.g:1462:9: NONE
                     {
                     match(input,NONE,FOLLOW_NONE_in_basic_expr2989); 
                      node = Expression.NONE; 
@@ -4945,7 +4966,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 13 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1440:9: UNIV
+                    // src/Kodkodi.g:1463:9: UNIV
                     {
                     match(input,UNIV,FOLLOW_UNIV_in_basic_expr3003); 
                      node = Expression.UNIV; 
@@ -4953,7 +4974,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 14 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1441:9: t= ( HAT | STAR | TILDE | ABS | SGN | MINUS ) e= basic_expr
+                    // src/Kodkodi.g:1464:9: t= ( HAT | STAR | TILDE | ABS | SGN | MINUS ) e= basic_expr
                     {
                     t=(Token)input.LT(1);
                     if ( input.LA(1)==MINUS||input.LA(1)==STAR||input.LA(1)==HAT||(input.LA(1)>=TILDE && input.LA(1)<=SGN) ) {
@@ -5013,7 +5034,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 15 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1480:9: BRACE_LEFT ds= decls t= BAR e= expr BRACE_RIGHT
+                    // src/Kodkodi.g:1503:9: BRACE_LEFT ds= decls t= BAR e= expr BRACE_RIGHT
                     {
                     match(input,BRACE_LEFT,FOLLOW_BRACE_LEFT_in_basic_expr3063); 
                     pushFollow(FOLLOW_decls_in_basic_expr3069);
@@ -5041,7 +5062,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 16 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1489:9: t= ( BITS | INT ) BRACKET_LEFT e= expr BRACKET_RIGHT
+                    // src/Kodkodi.g:1512:9: t= ( BITS | INT ) BRACKET_LEFT e= expr BRACKET_RIGHT
                     {
                     t=(Token)input.LT(1);
                     if ( (input.LA(1)>=BITS && input.LA(1)<=INT) ) {
@@ -5083,7 +5104,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "decls"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1495:1: decls returns [Decls nodes = null] : BRACKET_LEFT (d1= decl ( COMMA d2= decl )* )? BRACKET_RIGHT ;
+    // src/Kodkodi.g:1518:1: decls returns [Decls nodes = null] : BRACKET_LEFT (d1= decl ( COMMA d2= decl )* )? BRACKET_RIGHT ;
     public final Decls decls() throws RecognitionException {
         Decls nodes =  null;
 
@@ -5093,11 +5114,11 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1495:35: ( BRACKET_LEFT (d1= decl ( COMMA d2= decl )* )? BRACKET_RIGHT )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1496:9: BRACKET_LEFT (d1= decl ( COMMA d2= decl )* )? BRACKET_RIGHT
+            // src/Kodkodi.g:1518:35: ( BRACKET_LEFT (d1= decl ( COMMA d2= decl )* )? BRACKET_RIGHT )
+            // src/Kodkodi.g:1519:9: BRACKET_LEFT (d1= decl ( COMMA d2= decl )* )? BRACKET_RIGHT
             {
             match(input,BRACKET_LEFT,FOLLOW_BRACKET_LEFT_in_decls3138); 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1497:9: (d1= decl ( COMMA d2= decl )* )?
+            // src/Kodkodi.g:1520:9: (d1= decl ( COMMA d2= decl )* )?
             int alt52=2;
             int LA52_0 = input.LA(1);
 
@@ -5106,7 +5127,7 @@ public class KodkodiParser extends Parser {
             }
             switch (alt52) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1497:10: d1= decl ( COMMA d2= decl )*
+                    // src/Kodkodi.g:1520:10: d1= decl ( COMMA d2= decl )*
                     {
                     pushFollow(FOLLOW_decl_in_decls3153);
                     d1=decl();
@@ -5114,7 +5135,7 @@ public class KodkodiParser extends Parser {
                     state._fsp--;
 
                      nodes = d1; 
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1498:10: ( COMMA d2= decl )*
+                    // src/Kodkodi.g:1521:10: ( COMMA d2= decl )*
                     loop51:
                     do {
                         int alt51=2;
@@ -5127,7 +5148,7 @@ public class KodkodiParser extends Parser {
 
                         switch (alt51) {
                     	case 1 :
-                    	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1498:11: COMMA d2= decl
+                    	    // src/Kodkodi.g:1521:11: COMMA d2= decl
                     	    {
                     	    match(input,COMMA,FOLLOW_COMMA_in_decls3167); 
                     	    pushFollow(FOLLOW_decl_in_decls3173);
@@ -5168,7 +5189,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "decl"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1500:1: decl returns [Decl node] : n= VARIABLE_NAME c= COLON m= multiplicity e= expr ;
+    // src/Kodkodi.g:1523:1: decl returns [Decl node] : n= VARIABLE_NAME c= COLON m= multiplicity e= expr ;
     public final Decl decl() throws RecognitionException {
         Decl node = null;
 
@@ -5180,8 +5201,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1500:25: (n= VARIABLE_NAME c= COLON m= multiplicity e= expr )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1501:9: n= VARIABLE_NAME c= COLON m= multiplicity e= expr
+            // src/Kodkodi.g:1523:25: (n= VARIABLE_NAME c= COLON m= multiplicity e= expr )
+            // src/Kodkodi.g:1524:9: n= VARIABLE_NAME c= COLON m= multiplicity e= expr
             {
             n=(Token)match(input,VARIABLE_NAME,FOLLOW_VARIABLE_NAME_in_decl3211); 
             c=(Token)match(input,COLON,FOLLOW_COLON_in_decl3217); 
@@ -5223,14 +5244,14 @@ public class KodkodiParser extends Parser {
     };
 
     // $ANTLR start "assigns"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1508:1: assigns returns [Vector<Token> tokens = new Vector<Token>(),\n Vector<Node> oldNodes = new Vector<Node>(),\n Vector<Node> newNodes = new Vector<Node>()] : BRACKET_LEFT assign[$tokens, $oldNodes, $newNodes] ( COMMA assign[$tokens, $oldNodes, $newNodes] )* BRACKET_RIGHT ;
+    // src/Kodkodi.g:1531:1: assigns returns [Vector<Token> tokens = new Vector<Token>(),\n Vector<Node> oldNodes = new Vector<Node>(),\n Vector<Node> newNodes = new Vector<Node>()] : BRACKET_LEFT assign[$tokens, $oldNodes, $newNodes] ( COMMA assign[$tokens, $oldNodes, $newNodes] )* BRACKET_RIGHT ;
     public final KodkodiParser.assigns_return assigns() throws RecognitionException {
         KodkodiParser.assigns_return retval = new KodkodiParser.assigns_return();
         retval.start = input.LT(1);
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1510:61: ( BRACKET_LEFT assign[$tokens, $oldNodes, $newNodes] ( COMMA assign[$tokens, $oldNodes, $newNodes] )* BRACKET_RIGHT )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1511:9: BRACKET_LEFT assign[$tokens, $oldNodes, $newNodes] ( COMMA assign[$tokens, $oldNodes, $newNodes] )* BRACKET_RIGHT
+            // src/Kodkodi.g:1533:61: ( BRACKET_LEFT assign[$tokens, $oldNodes, $newNodes] ( COMMA assign[$tokens, $oldNodes, $newNodes] )* BRACKET_RIGHT )
+            // src/Kodkodi.g:1534:9: BRACKET_LEFT assign[$tokens, $oldNodes, $newNodes] ( COMMA assign[$tokens, $oldNodes, $newNodes] )* BRACKET_RIGHT
             {
             match(input,BRACKET_LEFT,FOLLOW_BRACKET_LEFT_in_assigns3249); 
             pushFollow(FOLLOW_assign_in_assigns3251);
@@ -5238,7 +5259,7 @@ public class KodkodiParser extends Parser {
 
             state._fsp--;
 
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1512:9: ( COMMA assign[$tokens, $oldNodes, $newNodes] )*
+            // src/Kodkodi.g:1535:9: ( COMMA assign[$tokens, $oldNodes, $newNodes] )*
             loop53:
             do {
                 int alt53=2;
@@ -5251,7 +5272,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt53) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1512:10: COMMA assign[$tokens, $oldNodes, $newNodes]
+            	    // src/Kodkodi.g:1535:10: COMMA assign[$tokens, $oldNodes, $newNodes]
             	    {
             	    match(input,COMMA,FOLLOW_COMMA_in_assigns3263); 
             	    pushFollow(FOLLOW_assign_in_assigns3265);
@@ -5291,7 +5312,7 @@ public class KodkodiParser extends Parser {
 
 
     // $ANTLR start "assign"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1516:1: assign[Vector<Token> tokens, Vector<Node> oldNodes, Vector<Node> newNodes] : (r= FORMULA_REG c= COLON_EQ e= expr | r= REL_EXPR_REG c= COLON_EQ e= expr | r= INT_EXPR_REG c= COLON_EQ e= expr );
+    // src/Kodkodi.g:1539:1: assign[Vector<Token> tokens, Vector<Node> oldNodes, Vector<Node> newNodes] : (r= FORMULA_REG c= COLON_EQ e= expr | r= REL_EXPR_REG c= COLON_EQ e= expr | r= INT_EXPR_REG c= COLON_EQ e= expr );
     public final void assign(Vector<Token> tokens, Vector<Node> oldNodes, Vector<Node> newNodes) throws RecognitionException {
         Token r=null;
         Token c=null;
@@ -5299,7 +5320,7 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1516:75: (r= FORMULA_REG c= COLON_EQ e= expr | r= REL_EXPR_REG c= COLON_EQ e= expr | r= INT_EXPR_REG c= COLON_EQ e= expr )
+            // src/Kodkodi.g:1539:75: (r= FORMULA_REG c= COLON_EQ e= expr | r= REL_EXPR_REG c= COLON_EQ e= expr | r= INT_EXPR_REG c= COLON_EQ e= expr )
             int alt54=3;
             switch ( input.LA(1) ) {
             case FORMULA_REG:
@@ -5326,7 +5347,7 @@ public class KodkodiParser extends Parser {
 
             switch (alt54) {
                 case 1 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1517:9: r= FORMULA_REG c= COLON_EQ e= expr
+                    // src/Kodkodi.g:1540:9: r= FORMULA_REG c= COLON_EQ e= expr
                     {
                     r=(Token)match(input,FORMULA_REG,FOLLOW_FORMULA_REG_in_assign3291); 
                     c=(Token)match(input,COLON_EQ,FOLLOW_COLON_EQ_in_assign3297); 
@@ -5345,7 +5366,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 2 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1523:9: r= REL_EXPR_REG c= COLON_EQ e= expr
+                    // src/Kodkodi.g:1546:9: r= REL_EXPR_REG c= COLON_EQ e= expr
                     {
                     r=(Token)match(input,REL_EXPR_REG,FOLLOW_REL_EXPR_REG_in_assign3321); 
                     c=(Token)match(input,COLON_EQ,FOLLOW_COLON_EQ_in_assign3327); 
@@ -5364,7 +5385,7 @@ public class KodkodiParser extends Parser {
                     }
                     break;
                 case 3 :
-                    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1529:9: r= INT_EXPR_REG c= COLON_EQ e= expr
+                    // src/Kodkodi.g:1552:9: r= INT_EXPR_REG c= COLON_EQ e= expr
                     {
                     r=(Token)match(input,INT_EXPR_REG,FOLLOW_INT_EXPR_REG_in_assign3351); 
                     c=(Token)match(input,COLON_EQ,FOLLOW_COLON_EQ_in_assign3357); 
@@ -5401,7 +5422,7 @@ public class KodkodiParser extends Parser {
     };
 
     // $ANTLR start "multiplicity"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1535:1: multiplicity returns [Token token, Multiplicity value] : t= ( NO | LONE | ONE | SOME | SET ) ;
+    // src/Kodkodi.g:1558:1: multiplicity returns [Token token, Multiplicity value] : t= ( NO | LONE | ONE | SOME | SET ) ;
     public final KodkodiParser.multiplicity_return multiplicity() throws RecognitionException {
         KodkodiParser.multiplicity_return retval = new KodkodiParser.multiplicity_return();
         retval.start = input.LT(1);
@@ -5409,8 +5430,8 @@ public class KodkodiParser extends Parser {
         Token t=null;
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1535:55: (t= ( NO | LONE | ONE | SOME | SET ) )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1536:9: t= ( NO | LONE | ONE | SOME | SET )
+            // src/Kodkodi.g:1558:55: (t= ( NO | LONE | ONE | SOME | SET ) )
+            // src/Kodkodi.g:1559:9: t= ( NO | LONE | ONE | SOME | SET )
             {
             t=(Token)input.LT(1);
             if ( input.LA(1)==SOME||(input.LA(1)>=ONE && input.LA(1)<=LONE)||(input.LA(1)>=NO && input.LA(1)<=SET) ) {
@@ -5463,7 +5484,7 @@ public class KodkodiParser extends Parser {
     };
 
     // $ANTLR start "project_columns"
-    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1555:1: project_columns returns [Token token,\n Vector<IntExpression> nodes = new Vector<IntExpression>()] : t= BRACKET_LEFT e1= expr (c= COMMA e2= expr )* BRACKET_RIGHT ;
+    // src/Kodkodi.g:1578:1: project_columns returns [Token token,\n Vector<IntExpression> nodes = new Vector<IntExpression>()] : t= BRACKET_LEFT e1= expr (c= COMMA e2= expr )* BRACKET_RIGHT ;
     public final KodkodiParser.project_columns_return project_columns() throws RecognitionException {
         KodkodiParser.project_columns_return retval = new KodkodiParser.project_columns_return();
         retval.start = input.LT(1);
@@ -5476,8 +5497,8 @@ public class KodkodiParser extends Parser {
 
 
         try {
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1557:75: (t= BRACKET_LEFT e1= expr (c= COMMA e2= expr )* BRACKET_RIGHT )
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1558:9: t= BRACKET_LEFT e1= expr (c= COMMA e2= expr )* BRACKET_RIGHT
+            // src/Kodkodi.g:1580:75: (t= BRACKET_LEFT e1= expr (c= COMMA e2= expr )* BRACKET_RIGHT )
+            // src/Kodkodi.g:1581:9: t= BRACKET_LEFT e1= expr (c= COMMA e2= expr )* BRACKET_RIGHT
             {
             t=(Token)match(input,BRACKET_LEFT,FOLLOW_BRACKET_LEFT_in_project_columns3436); 
             pushFollow(FOLLOW_expr_in_project_columns3442);
@@ -5489,7 +5510,7 @@ public class KodkodiParser extends Parser {
                         retval.token = t;
                         retval.nodes.add(I(t, e1));
                     
-            // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1561:11: (c= COMMA e2= expr )*
+            // src/Kodkodi.g:1584:11: (c= COMMA e2= expr )*
             loop55:
             do {
                 int alt55=2;
@@ -5502,7 +5523,7 @@ public class KodkodiParser extends Parser {
 
                 switch (alt55) {
             	case 1 :
-            	    // /Users/blanchet/tum/nitpick/Kodkodi/src/Kodkodi.g:1561:12: c= COMMA e2= expr
+            	    // src/Kodkodi.g:1584:12: c= COMMA e2= expr
             	    {
             	    c=(Token)match(input,COMMA,FOLLOW_COMMA_in_project_columns3451); 
             	    pushFollow(FOLLOW_expr_in_project_columns3457);

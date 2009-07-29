@@ -105,9 +105,9 @@ public final class Kodkodi
             "output\n" +
             "  -max-msecs <num>    Maximum running time in milliseconds\n" +
             "  -max-threads <num>  Maximum number of simultaneous threads " +
-            "(default: " + Runtime.getRuntime().availableProcessors()  + ")" +
-            "  -server           Run as TCP server\n" +
-            "  -port <number>    Listen to specified port (default: " + DEFAULT_PORT + ")\n");
+            "(default: " + Runtime.getRuntime().availableProcessors()  + ")\n" +
+            "  -server             Run as TCP server\n" +
+            "  -port <number>      Listen to specified port (default: " + DEFAULT_PORT + ")\n");
         System.exit(code);
     }
 
@@ -124,8 +124,7 @@ public final class Kodkodi
             ANTLRInputStream stream = new ANTLRInputStream(in);
             KodkodiLexer lexer = new KodkodiLexer(stream);
             KodkodiParser parser = KodkodiParser.create(verbose, exitOnSuccess,
-                                                        cleanUpInst, maxThreads,
-                                                        lexer);
+                                                        cleanUpInst, maxThreads, lexer);
             int numErrors = 0;
 
             try {
@@ -196,7 +195,7 @@ public final class Kodkodi
 	    } else {
 		System.out.println("Client: " + inputLine);
 		output = callSolver(new ByteArrayInputStream(inputLine.getBytes("UTF-8")));
-		out.println(output+";");
+		out.println(output+";;");
 		inputLine = "";
 	    }
 	}
